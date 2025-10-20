@@ -1,0 +1,15 @@
+# Core dependencies
+anthropic>=0.39.0          # Claude API client
+pyzotero>=1.5.18          # Zotero API wrapper
+PyMuPDF>=1.24.0           # PDF text and image extraction
+rich>=13.7.0              # Beautiful terminal formatting
+
+# Optional but recommended
+python-dotenv>=1.0.0      # Environment variable management
+requests>=2.31.0          # HTTP library (dependency of pyzotero)
+click>=8.1.7              # Better command-line interface (optional)
+
+# For development/testing (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# mypy>=1.5.0
