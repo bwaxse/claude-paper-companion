@@ -34,6 +34,7 @@ class PaperCompanion:
         - Zotero search: zotero:search:transformer attention
         """
         self.setup_zotero()
+        self.zotero_item = None  # Store linked Zotero item
         
         # Handle different input types
         if pdf_input.startswith('zotero:'):
@@ -55,7 +56,6 @@ class PaperCompanion:
         self.flagged_exchanges = []
         self.pdf_content = None
         self.pdf_images = []
-        self.zotero_item = None  # Store linked Zotero item
         
         # Load PDF
         self._load_pdf()
