@@ -338,7 +338,7 @@ Here's the paper text:
             })
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=2000,
             messages=[{"role": "user", "content": content}]
         )
@@ -463,7 +463,7 @@ Here's the paper text:
         messages.append({"role": "user", "content": user_input})
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=2000,
             messages=messages
         )
@@ -551,7 +551,7 @@ CONVERSATION INSIGHTS:
 """
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=3000,
             messages=[{"role": "user", "content": extraction_prompt}]
         )
