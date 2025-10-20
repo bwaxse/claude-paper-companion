@@ -312,7 +312,7 @@ Please verify and enhance this metadata if possible.
 Please provide a CRITICAL SENIOR SCIENTIST REVIEW of this paper. Be direct and intellectually honest.
 
 ## 1. CORE CLAIM ASSESSMENT
-- What is the paper actually claiming? (not what they say they're claiming)
+- What is the paper claiming?
 - Is this genuinely novel or incremental dressed as revolutionary?
 - What would a skeptical reviewer ask immediately?
 
@@ -320,11 +320,11 @@ Please provide a CRITICAL SENIOR SCIENTIST REVIEW of this paper. Be direct and i
 - What are they NOT telling us about their methods?
 - Where are the potential p-hacking or cherry-picking risks?
 - What controls are missing?
-- Sample size and statistical power concerns?
+- Other concerns (e.g., sample size, statistical power)?
 
 ## 3. RESULTS REALITY CHECK
-- Do the results actually support the conclusions?
-- What's in the supplementary materials they hope we won't check?
+- Do the results actually support the claims and/or conclusions?
+- Anything in the supplementary materials they hope we won't check?
 - Are effect sizes meaningful or just statistically significant?
 - Any suspicious data patterns? (too clean, missing variance, etc.)
 
@@ -353,13 +353,13 @@ Be blunt. Point out bullshit. Identify real insights. Think like a reviewer who'
 
 Here's the paper text:
 
-{self.pdf_content[:50000]}  # Truncate for initial summary
+{self.pdf_content[:100000]}  # Truncate for initial summary
 """
             }
         ]
         
         # Add first few images if available
-        for img in self.pdf_images[:3]:
+        for img in self.pdf_images[:6]:
             content.append({
                 "type": "image",
                 "source": {
@@ -370,7 +370,7 @@ Here's the paper text:
             })
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
             max_tokens=2500,
             messages=[{"role": "user", "content": content}]
         )
@@ -389,7 +389,6 @@ Here's the paper text:
         console.print("  [yellow]/flag[/yellow] - Mark this exchange as important")
         console.print("  [yellow]/exit[/yellow] - End session and save insights")
         console.print("  [yellow]/img N[/yellow] - Show figure N from the paper")
-        console.print("  [yellow]/highlight[/yellow] - Suggest text to highlight in Zotero")
         console.print("  [yellow]/related[/yellow] - Find related papers in your Zotero library")
         console.print()
         
@@ -406,9 +405,6 @@ Here's the paper text:
             elif user_input.lower().startswith('/img'):
                 self._show_image(user_input)
                 continue
-            elif user_input.lower() == '/highlight':
-                self._suggest_highlights()
-                continue
             elif user_input.lower() == '/related':
                 self._find_related_papers()
                 continue
@@ -423,29 +419,6 @@ Here's the paper text:
             # Store exchange
             self.messages.append({"role": "user", "content": user_input})
             self.messages.append({"role": "assistant", "content": response})
-    
-    def _suggest_highlights(self):
-        """Suggest key passages to highlight in Zotero"""
-        prompt = """Based on our conversation and the paper content, suggest 5-7 key passages 
-        that would be most valuable to highlight in Zotero. For each passage, provide:
-        1. The page number
-        2. A brief excerpt (first few words... last few words)
-        3. Why it's important to highlight
-        
-        Focus on: methodology details, key findings, limitations, and future work."""
-        
-        response = self._get_claude_response(prompt)
-        console.print("\n[bold yellow]Highlighting Suggestions:[/bold yellow]")
-        console.print(Markdown(response))
-        
-        # Store this as a flagged exchange
-        self.messages.append({"role": "user", "content": prompt})
-        self.messages.append({"role": "assistant", "content": response})
-        self.flagged_exchanges.append({
-            "user": "Highlighting suggestions requested",
-            "assistant": response,
-            "timestamp": datetime.now().isoformat()
-        })
     
     def _find_related_papers(self):
         """Find related papers in Zotero library"""
@@ -495,7 +468,7 @@ Here's the paper text:
         messages.append({"role": "user", "content": user_input})
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
             max_tokens=2000,
             messages=messages
         )
@@ -583,7 +556,7 @@ CONVERSATION INSIGHTS:
 """
         
         response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
             max_tokens=3000,
             messages=[{"role": "user", "content": extraction_prompt}]
         )
