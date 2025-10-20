@@ -2,6 +2,34 @@
 
 An intelligent command-line tool for having conversations with Claude about scientific PDFs, with automatic insight extraction and deep Zotero integration. Works seamlessly with papers already in your Zotero library!
 
+## 📖 Documentation
+
+- **[INSTALL.md](INSTALL.md)** - Step-by-step installation guide
+- **[USAGE.md](USAGE.md)** - Real workflow examples & shell shortcuts  
+- **[README.md](#features)** - Features and overview (this file)
+
+## Quick Start (For Experienced Users)
+
+```bash
+# Setup
+git clone [repository]
+cd paper-companion
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python setup.py  # Configure Zotero
+
+# Add to ~/.zshrc (see USAGE.md for full shortcuts)
+alias z20='cd ~/Documents/paper_companion && source venv/bin/activate && python list_zotero.py 20'
+alias pc='cd ~/Documents/paper_companion && source venv/bin/activate && python chat.py'
+
+# Daily workflow
+z20                           # List recent papers
+pc zotero:ABCD1234           # Discuss paper
+pc "zotero:search:attention"  # Search and discuss
+```
+
+**📖 See [USAGE.md](USAGE.md) for complete workflow examples and shell shortcuts**
+
 ## Features
 
 ### Core Capabilities
