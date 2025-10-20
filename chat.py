@@ -7,6 +7,7 @@ Enhanced to work directly with Zotero's PDF storage
 import sys
 import os
 import json
+import tempfile
 import base64
 from pathlib import Path
 from datetime import datetime
