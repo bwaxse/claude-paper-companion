@@ -59,33 +59,32 @@ class PaperCompanion:
         
         # Load PDF
         self._load_pdf()
-    
+
     def _load_from_zotero(self, zotero_input: str) -> Path:
-        """Load PDF from Zotero library"""
+        """Load PDF from Zotero library (cloud-based, not local)"""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
-        
+    
         # Parse input format
         if zotero_input.startswith('zotero:search:'):
-            # Search for item
             query = zotero_input.replace('zotero:search:', '')
             items = self._search_zotero_items(query)
         elif zotero_input.startswith('zotero:'):
-            # Direct item key
             item_key = zotero_input.replace('zotero:', '')
             try:
                 item = self.zot.item(item_key)
                 items = [item] if item else []
-            except:
+            except Exception as e:
+                console.print(f"[red]Error fetching item from Zotero: {e}[/red]")
                 items = []
         else:
             items = []
-        
+    
         if not items:
             console.print("[red]No items found in Zotero[/red]")
             return None
-        
+    
         # If multiple items, let user choose
         if len(items) > 1:
             item = self._choose_zotero_item(items)
@@ -93,11 +92,11 @@ class PaperCompanion:
             item = items[0]
         
         self.zotero_item = item
-        
+
         # Find PDF attachment
         attachments = self.zot.children(item['key'])
         pdf_attachment = None
-        
+
         for att in attachments:
             if att['data'].get('contentType') == 'application/pdf':
                 pdf_attachment = att
@@ -106,21 +105,22 @@ class PaperCompanion:
         if not pdf_attachment:
             console.print("[red]No PDF attachment found for this item[/red]")
             return None
-        
-        # Get PDF path from Zotero storage
-        # Zotero stores PDFs in: ~/Zotero/storage/{ATTACHMENT_KEY}/{filename}
-        zotero_storage = Path.home() / 'Zotero' / 'storage'
-        pdf_dir = zotero_storage / pdf_attachment['key']
-        
-        # Find the PDF file
-        if pdf_dir.exists():
-            pdf_files = list(pdf_dir.glob('*.pdf'))
-            if pdf_files:
-                console.print(f"[green]Loading PDF from Zotero: {item['data'].get('title', 'Untitled')}[/green]")
-                return pdf_files[0]
-        
-        console.print("[red]PDF file not found in Zotero storage[/red]")
-        return None
+            
+        # Create a temporary file to store downloaded PDF
+        pdf_temp_path = Path(tempfile.gettempdir()) / f"{item_key}.pdf"
+    
+        try:
+            # Download the PDF from Zotero's cloud
+            self.zot.dump(
+                pdf_attachment['key'],
+                filename=pdf_temp_path.name,
+                path=str(pdf_temp_path.parent)
+            )
+            console.print(f"[green]✓ Downloaded PDF from Zotero cloud: {item['data'].get('title', 'Untitled')}[/green]")
+            return pdf_temp_path
+        except Exception as e:
+            console.print(f"[red]Failed to download PDF from Zotero: {e}[/red]")
+            return None
     
     def _search_zotero_items(self, query: str) -> List:
         """Search Zotero library for items"""
