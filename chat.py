@@ -7,7 +7,6 @@ Enhanced to work directly with Zotero's PDF storage
 import sys
 import os
 import json
-import tempfile
 import base64
 from pathlib import Path
 from datetime import datetime
@@ -35,7 +34,6 @@ class PaperCompanion:
         - Zotero search: zotero:search:transformer attention
         """
         self.setup_zotero()
-        self.zotero_item = None  # Store linked Zotero item
         
         # Handle different input types
         if pdf_input.startswith('zotero:'):
@@ -57,35 +55,37 @@ class PaperCompanion:
         self.flagged_exchanges = []
         self.pdf_content = None
         self.pdf_images = []
+        self.zotero_item = None  # Store linked Zotero item
         
         # Load PDF
         self._load_pdf()
-
+    
     def _load_from_zotero(self, zotero_input: str) -> Path:
-        """Load PDF from Zotero library (cloud-based, not local)"""
+        """Load PDF from Zotero library"""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
-    
+        
         # Parse input format
         if zotero_input.startswith('zotero:search:'):
+            # Search for item
             query = zotero_input.replace('zotero:search:', '')
             items = self._search_zotero_items(query)
         elif zotero_input.startswith('zotero:'):
+            # Direct item key
             item_key = zotero_input.replace('zotero:', '')
             try:
                 item = self.zot.item(item_key)
                 items = [item] if item else []
-            except Exception as e:
-                console.print(f"[red]Error fetching item from Zotero: {e}[/red]")
+            except:
                 items = []
         else:
             items = []
-    
+        
         if not items:
             console.print("[red]No items found in Zotero[/red]")
             return None
-    
+        
         # If multiple items, let user choose
         if len(items) > 1:
             item = self._choose_zotero_item(items)
@@ -93,11 +93,11 @@ class PaperCompanion:
             item = items[0]
         
         self.zotero_item = item
-
+        
         # Find PDF attachment
         attachments = self.zot.children(item['key'])
         pdf_attachment = None
-
+        
         for att in attachments:
             if att['data'].get('contentType') == 'application/pdf':
                 pdf_attachment = att
@@ -106,22 +106,21 @@ class PaperCompanion:
         if not pdf_attachment:
             console.print("[red]No PDF attachment found for this item[/red]")
             return None
-            
-        # Create a temporary file to store downloaded PDF
-        pdf_temp_path = Path(tempfile.gettempdir()) / f"{item_key}.pdf"
-    
-        try:
-            # Download the PDF from Zotero's cloud
-            self.zot.dump(
-                pdf_attachment['key'],
-                filename=pdf_temp_path.name,
-                path=str(pdf_temp_path.parent)
-            )
-            console.print(f"[green]✓ Downloaded PDF from Zotero cloud: {item['data'].get('title', 'Untitled')}[/green]")
-            return pdf_temp_path
-        except Exception as e:
-            console.print(f"[red]Failed to download PDF from Zotero: {e}[/red]")
-            return None
+        
+        # Get PDF path from Zotero storage
+        # Zotero stores PDFs in: ~/Zotero/storage/{ATTACHMENT_KEY}/{filename}
+        zotero_storage = Path.home() / 'Zotero' / 'storage'
+        pdf_dir = zotero_storage / pdf_attachment['key']
+        
+        # Find the PDF file
+        if pdf_dir.exists():
+            pdf_files = list(pdf_dir.glob('*.pdf'))
+            if pdf_files:
+                console.print(f"[green]Loading PDF from Zotero: {item['data'].get('title', 'Untitled')}[/green]")
+                return pdf_files[0]
+        
+        console.print("[red]PDF file not found in Zotero storage[/red]")
+        return None
     
     def _search_zotero_items(self, query: str) -> List:
         """Search Zotero library for items"""
@@ -287,8 +286,8 @@ class PaperCompanion:
         return ", ".join(authors)
     
     def get_initial_summary(self) -> str:
-        """Get Claude's initial analysis of the paper"""
-        console.print("[cyan]Analyzing paper structure...[/cyan]")
+        """Get Claude's critical analysis of the paper"""
+        console.print("[cyan]Performing critical analysis...[/cyan]")
         
         # Include Zotero metadata if available
         context = ""
@@ -309,15 +308,47 @@ Please verify and enhance this metadata if possible.
                 "type": "text",
                 "text": f"""{context}
 
-Please provide a structured summary of this scientific paper. Include:
+Please provide a CRITICAL SENIOR SCIENTIST REVIEW of this paper. Be direct and intellectually honest.
 
-1. **Title & Authors** (verify against Zotero if provided)
-2. **Main Research Question**
-3. **Methods** (key approaches)
-4. **Key Findings** (3-5 bullet points)
-5. **Significance** (why this matters)
-6. **Notable Figures** (if any caught your attention)
-7. **Your Highlights** (sections worth highlighting in Zotero)
+## 1. CORE CLAIM ASSESSMENT
+- What is the paper actually claiming? (not what they say they're claiming)
+- Is this genuinely novel or incremental dressed as revolutionary?
+- What would a skeptical reviewer ask immediately?
+
+## 2. METHODOLOGICAL SCRUTINY
+- What are they NOT telling us about their methods?
+- Where are the potential p-hacking or cherry-picking risks?
+- What controls are missing?
+- Sample size and statistical power concerns?
+
+## 3. RESULTS REALITY CHECK
+- Do the results actually support the conclusions?
+- What's in the supplementary materials they hope we won't check?
+- Are effect sizes meaningful or just statistically significant?
+- Any suspicious data patterns? (too clean, missing variance, etc.)
+
+## 4. HIDDEN LIMITATIONS
+- What limitations did they bury in the discussion?
+- What caveats make their findings less generalizable?
+- What would fail to replicate?
+
+## 5. ACTUAL CONTRIBUTION
+- Strip away the hype: what's the real advance here?
+- Who actually benefits from this work?
+- What's the next obvious experiment they didn't do?
+
+## 6. RED FLAGS & CONCERNS
+- Overclaimed findings
+- Conflicts of interest
+- Questionable citations or self-citation padding
+- Technical issues glossed over
+
+## 7. WORTH YOUR TIME?
+- Should you deeply engage with this paper?
+- What specific sections deserve careful scrutiny?
+- What should you highlight for your future self?
+
+Be blunt. Point out bullshit. Identify real insights. Think like a reviewer who's seen every trick.
 
 Here's the paper text:
 
@@ -338,8 +369,8 @@ Here's the paper text:
             })
         
         response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=2000,
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=2500,
             messages=[{"role": "user", "content": content}]
         )
         
@@ -463,7 +494,7 @@ Here's the paper text:
         messages.append({"role": "user", "content": user_input})
         
         response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=2000,
             messages=messages
         )
@@ -551,7 +582,7 @@ CONVERSATION INSIGHTS:
 """
         
         response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=3000,
             messages=[{"role": "user", "content": extraction_prompt}]
         )
