@@ -330,6 +330,70 @@ class PaperCompanion:
         return ", ".join(authors)
     
     def get_initial_summary(self) -> str:
+        """Get Claude's concise, actionable summary of the paper"""
+        console.print("[cyan]Analyzing paper...[/cyan]")
+        
+        # Include Zotero metadata if available
+        context = ""
+        if self.zotero_item:
+            data = self.zotero_item['data']
+            context = f"""This paper is already in your Zotero library with:
+- Title: {data.get('title', 'Unknown')}
+- Authors: {self._format_authors(data.get('creators', []))}
+- Journal: {data.get('publicationTitle', 'Unknown')}
+- DOI: {data.get('DOI', 'None')}
+"""
+        
+        # Prepare content for Claude
+        content = [
+            {
+                "type": "text",
+                "text": f"""{context}
+    
+    You are a prominent senior scientist reviewing this paper. Be direct and intellectually honest. Please provide a CONCISE 5-bullet summary of this paper's most important aspects.
+    
+    Format each bullet as:
+    - [ASPECT]: One clear, specific sentence
+    
+    Focus on what matters most:
+    - Core innovation (if any)
+    - Key methodological strength or flaw
+    - Most significant finding
+    - Critical limitation
+    - Real-world impact/applicability
+    
+    After the bullets, suggest 2-3 specific aspects the reader might want to explore based on the paper's content.
+    
+    Paper text:
+    {self.pdf_content[:100000]}"""
+            }
+        ]
+        
+        # Add figures
+        for img in self.pdf_images:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": img["type"],
+                    "data": img["data"]
+                }
+            })
+        
+        response = self.anthropic.messages.create(
+            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
+            max_tokens=800, #keep it concise
+            messages=[{"role": "user", "content": content}]
+        )
+        
+        summary = response.content[0].text
+
+        # Store in conversation history
+        self.messages.append({"role": "assistant", "content": summary})
+
+        return summary
+
+    def get_full_critical_review(self) -> str:
         """Get Claude's critical analysis of the paper"""
         console.print("[cyan]Performing critical analysis...[/cyan]")
         
@@ -426,16 +490,20 @@ Here's the paper text:
         return summary
     
     def chat_loop(self):
-        """Main interactive chat loop"""
-        console.print("\n[bold cyan]Starting conversation. Commands:[/bold cyan]")
+        """Main interactive chat loop - enhanced with new commands"""
+        console.print("\n[bold cyan]Let's explore this paper together. Commands:[/bold cyan]")
         console.print("  [yellow]/flag[/yellow] - Mark this exchange as important")
+        console.print("  [yellow]/fullreview[/yellow] - Get comprehensive critical analysis")
+        console.print("  [yellow]/methods[/yellow] - Deep dive into methodology")
+        console.print("  [yellow]/stats[/yellow] - Statistical analysis check")
+        console.print("  [yellow]/compare[/yellow] - Compare to related work")
+        console.print("  [yellow]/figures[/yellow] - List all figures")
+        console.print("  [yellow]/fig N[/yellow] - Analyze figure N")
+        console.print("  [yellow]/related[/yellow] - Find related papers in Zotero")
         console.print("  [yellow]/exit[/yellow] - End session and save insights")
-        console.print("  [yellow]/img N[/yellow] - Show figure N from the paper")
-        console.print("  [yellow]/related[/yellow] - Find related papers in your Zotero library")
         console.print()
         
         while True:
-            # Get user input
             user_input = Prompt.ask("\n[bold green]You[/bold green]")
             
             # Handle commands
@@ -444,8 +512,24 @@ Here's the paper text:
             elif user_input.lower() == '/flag':
                 self._flag_last_exchange()
                 continue
-            elif user_input.lower().startswith('/img'):
-                self._show_image(user_input)
+            elif user_input.lower() == '/fullreview':
+                response = self.get_full_critical_review()
+                console.print("\n[bold blue]Full Critical Review:[/bold blue]")
+                console.print(Markdown(response))
+                self.messages.append({"role": "assistant", "content": response})
+                continue
+            elif user_input.lower() == '/methods':
+                response = self._analyze_methods()
+                console.print("\n[bold blue]Methods Analysis:[/bold blue]")
+                console.print(Markdown(response))
+                continue
+            elif user_input.lower() == '/stats':
+                response = self._check_statistics()
+                console.print("\n[bold blue]Statistical Check:[/bold blue]")
+                console.print(Markdown(response))
+                continue
+            elif user_input.lower().startswith('/fig'):
+                self._analyze_figure(user_input)
                 continue
             elif user_input.lower() == '/related':
                 self._find_related_papers()
@@ -461,7 +545,7 @@ Here's the paper text:
             # Store exchange
             self.messages.append({"role": "user", "content": user_input})
             self.messages.append({"role": "assistant", "content": response})
-    
+
     def _find_related_papers(self):
         """Find related papers in Zotero library"""
         if not self.zot:
@@ -499,8 +583,15 @@ Here's the paper text:
         # Add paper context (truncated)
         messages.append({
             "role": "user",
-            "content": f"I'm reading a paper. Here's the content:\n\n{self.pdf_content[:30000]}"
-        })
+        "content": f"""I'm reading this paper and having a conversation about it. 
+        
+Keep responses concise (1-2 short paragraphs max) and conversational. 
+Be specific and actionable. Point to specific sections/figures when relevant.
+If I ask about something specific, dive deep but stay focused, going short paragraph by short paragraph
+
+Paper content:
+{self.pdf_content[:100000]}"""
+    })
 
         # Add conversation history (recent)
         for msg in self.messages[-10:]:
@@ -511,7 +602,7 @@ Here's the paper text:
 
         response = self.anthropic.messages.create(
             model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=2000,
+            max_tokens=1000,
             messages=messages
         )
 
@@ -755,12 +846,16 @@ CONVERSATION INSIGHTS:
         console.print(f"[green]✓ Backup saved: {backup_path}[/green]")
     
     def run(self):
-        """Main execution flow"""
+        """Main execution flow - now conversational"""
         try:
-            # Initial summary
+            # Initial concise summary
             summary = self.get_initial_summary()
-            console.print("\n[bold]Initial Analysis:[/bold]")
+            console.print("\n[bold]Key Points:[/bold]")
             console.print(Markdown(summary))
+            
+            # Prompt for focus
+            console.print("\n[cyan]What would you like to explore first?[/cyan]")
+            console.print("[dim]You can ask about specific sections, methods, results, or use commands above[/dim]")
             
             # Interactive chat
             self.chat_loop()
@@ -779,11 +874,6 @@ CONVERSATION INSIGHTS:
         except KeyboardInterrupt:
             console.print("\n[yellow]Session interrupted - saving backup...[/yellow]")
             self.save_local_backup({"interrupted": True, "messages": self.messages})
-        except Exception as e:
-            console.print(f"\n[red]Error: {e}[/red]")
-            import traceback
-            traceback.print_exc()
-
 
 def main():
     """Enhanced main with Zotero integration"""
