@@ -66,13 +66,13 @@ class PaperCompanion:
         else:
             self._load_pdf()
 
-    def _load_from_zotero(self, zotero_input: str):
-        """Load one or more PDFs from a Zotero item (main + supplements)"""
+    def _load_from_zotero(self, zotero_input: str) -> Path:
+        """Load the main PDF (Full Text PDF) from Zotero, and optionally supplements."""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
     
-        # Parse input format
+        # Parse input
         if zotero_input.startswith('zotero:search:'):
             query = zotero_input.replace('zotero:search:', '')
             items = self._search_zotero_items(query)
@@ -91,79 +91,64 @@ class PaperCompanion:
             console.print("[red]No items found in Zotero[/red]")
             return None
     
-        # If multiple Zotero hits, let user choose
-        if len(items) > 1:
-            item = self._choose_zotero_item(items)
-        else:
-            item = items[0]
-    
+        # Choose one item if multiple found
+        item = self._choose_zotero_item(items) if len(items) > 1 else items[0]
         self.zotero_item = item
-        item_key = item['key']
     
-        # List all attachments and filter for PDFs
-        attachments = self.zot.children(item_key)
-        pdf_attachments = [
-            att for att in attachments
-            if att['data'].get('contentType') == 'application/pdf'
-        ]
+        # List attachments
+        attachments = [a for a in self.zot.children(item['key']) 
+                       if a['data'].get('contentType') == 'application/pdf']
     
-        if not pdf_attachments:
+        if not attachments:
             console.print("[red]No PDF attachments found for this item[/red]")
             return None
     
-        # Display all available PDFs
-        table = Table(title=f"PDFs attached to: {item['data'].get('title', 'Untitled')}")
-        table.add_column("#", justify="right")
-        table.add_column("Title")
-        table.add_column("Key")
-        table.add_column("Filename")
+        # Identify main paper
+        main_pdf = next((a for a in attachments if a['data'].get('title') == 'Full Text PDF'), None)
+        if not main_pdf:
+            main_pdf = attachments[0]  # fallback
     
-        for idx, att in enumerate(pdf_attachments, start=1):
-            data = att['data']
-            title = data.get('title', 'Untitled')
-            filename = data.get('filename', 'unknown.pdf')
-            table.add_row(str(idx), title, att['key'], filename)
-        console.print(table)
+        # Ask about supplements
+        supplements = [a for a in attachments if a != main_pdf]
+        if supplements:
+            console.print(f"[yellow]Found {len(supplements)} supplemental PDF(s):[/yellow]")
+            for i, s in enumerate(supplements, 1):
+                console.print(f"  {i}. {s['data'].get('title', 'Untitled')}")
     
-        # User choice
-        console.print("[cyan]Enter the number of the PDF to load (or 'a' for all):[/cyan]")
-        choice = input("> ").strip().lower()
-    
-        if choice == 'a':
-            selected_pdfs = pdf_attachments
+            include_supp = Prompt.ask(
+                "Include supplemental files as well?", choices=["y", "n"], default="y"
+            ) == "y"
         else:
+            include_supp = False
+    
+        # Download PDFs
+        temp_dir = Path(tempfile.gettempdir())
+        pdf_paths = []
+    
+        def _download_attachment(att):
+            pdf_temp_path = temp_dir / f"{item['key']}_{att['key']}.pdf"
             try:
-                idx = int(choice) - 1
-                selected_pdfs = [pdf_attachments[idx]]
-            except (ValueError, IndexError):
-                console.print("[red]Invalid choice[/red]")
+                self.zot.dump(att['key'], filename=pdf_temp_path.name, path=str(temp_dir))
+                console.print(f"[green]✓ Downloaded: {att['data'].get('title', 'Untitled')}[/green]")
+                return pdf_temp_path
+            except Exception as e:
+                console.print(f"[red]Failed to download {att['data'].get('title')}: {e}[/red]")
                 return None
     
-        tmp_dir = Path(tempfile.gettempdir())
-        downloaded_paths = []
+        main_path = _download_attachment(main_pdf)
+        if not main_path:
+            return None
     
-        for att in selected_pdfs:
-            title = att['data'].get('title', 'Untitled')
-            key = att['key']
-            filename = att['data'].get('filename', f"{key}.pdf")
-            pdf_path = tmp_dir / filename
+        if include_supp:
+            for supp in supplements:
+                supp_path = _download_attachment(supp)
+                if supp_path:
+                    pdf_paths.append(supp_path)
     
-            try:
-                self.zot.dump(
-                    key,
-                    filename=filename,
-                    path=str(tmp_dir)
-                )
-                console.print(f"[green]✓ Downloaded {title}[/green]")
-                downloaded_paths.append(pdf_path)
-            except Exception as e:
-                console.print(f"[red]Failed to download {title}: {e}[/red]")
-    
-        # Return single path or list
-        if len(downloaded_paths) == 1:
-            return downloaded_paths[0]
-        return downloaded_paths
-    
+        # Combine PDFs’ text later
+        self.supplement_paths = pdf_paths  # store for later loading
+        return main_path
+
     def _search_zotero_items(self, query: str) -> List:
         """Search Zotero library for items"""
         console.print(f"[cyan]Searching Zotero for: {query}[/cyan]")
@@ -247,50 +232,67 @@ class PaperCompanion:
             self.zot = None
     
     def _load_pdf(self):
-        """Extract text and images from PDF"""
-        console.print(f"[cyan]Loading PDF: {self.pdf_path.name}[/cyan]")
-    
-        doc = fitz.open(self.pdf_path)
-        
-        # Extract text
-        text_content = []
-        for page_num, page in enumerate(doc, 1):
-            text = page.get_text()
-            if text.strip():
-                text_content.append(f"[Page {page_num}]\n{text}")
-        
-        self.pdf_content = "\n\n".join(text_content)
-        
-        # Extract images (limit to significant ones)
-        for page_num, page in enumerate(doc, 1):
-            image_list = page.get_images(full=True)
+        """Extract text and images from main and supplemental PDFs"""
+        def extract_from_pdf(pdf_path: Path, label: str) -> Tuple[str, List[Dict]]:
+            """Helper: extract text and images from a single PDF"""
+            console.print(f"[cyan]Loading {label}: {pdf_path.name}[/cyan]")
+            doc = fitz.open(pdf_path)
             
-            for img_index, img in enumerate(image_list):
-                try:
-                    xref = img[0]
-                    pix = fitz.Pixmap(doc, xref)
-                    
-                    # Only include substantial images (likely figures)
-                    if pix.width > 200 and pix.height > 200:
-                        if pix.n - pix.alpha < 4:  # RGB or gray
-                            img_data = pix.tobytes("png")
-                            img_base64 = base64.b64encode(img_data).decode()
-                            
-                            self.pdf_images.append({
-                                "page": page_num,
-                                "index": img_index,
-                                "data": img_base64,
-                                "type": "image/png"
-                            })
-                    
-                    pix = None
-                except:
-                    continue
-        
-        doc.close()
-        console.print(f"[green]✓ Loaded {len(text_content)} pages, {len(self.pdf_images)} figures[/green]")
-        
-        # If loaded from Zotero, show existing metadata
+            text_content = []
+            images = []
+            
+            for page_num, page in enumerate(doc, 1):
+                # Text extraction
+                text = page.get_text()
+                if text.strip():
+                    text_content.append(f"[Page {page_num}]\n{text}")
+                
+                # Image extraction
+                for img_index, img in enumerate(page.get_images(full=True)):
+                    try:
+                        xref = img[0]
+                        pix = fitz.Pixmap(doc, xref)
+                        
+                        # Only include substantial images (likely figures)
+                        if pix.width > 200 and pix.height > 200:
+                            if pix.n - pix.alpha < 4:  # RGB or grayscale
+                                img_data = pix.tobytes("png")
+                                img_base64 = base64.b64encode(img_data).decode()
+                                images.append({
+                                    "source": pdf_path.name,
+                                    "page": page_num,
+                                    "index": img_index,
+                                    "data": img_base64,
+                                    "type": "image/png"
+                                })
+                        pix = None
+                    except Exception:
+                        continue
+            
+            doc.close()
+            console.print(f"[green]✓ Loaded {len(text_content)} pages, {len(images)} figures from {label}[/green]")
+            return "\n\n".join(text_content), images
+    
+        # === MAIN PDF ===
+        main_text, main_images = extract_from_pdf(self.pdf_path, "main PDF")
+    
+        # === SUPPLEMENTAL PDFs (if any) ===
+        combined_text = main_text
+        combined_images = main_images
+    
+        if hasattr(self, "supplement_paths") and self.supplement_paths:
+            for supp_path in self.supplement_paths:
+                supp_text, supp_images = extract_from_pdf(supp_path, "supplemental PDF")
+                combined_text += f"\n\n=== SUPPLEMENTAL MATERIAL: {supp_path.name} ===\n\n" + supp_text
+                combined_images.extend(supp_images)
+    
+        self.pdf_content = combined_text
+        self.pdf_images = combined_images
+    
+        # Show summary
+        console.print(f"[bold green]✓ Total: {len(self.pdf_images)} figures across all PDFs[/bold green]")
+    
+        # Show existing Zotero metadata (if available)
         if self.zotero_item:
             self._show_zotero_metadata()
     
