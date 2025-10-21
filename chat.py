@@ -496,26 +496,28 @@ Here's the paper text:
         """Get response from Claude with full context"""
         # Build conversation context
         messages = []
-        
+
         # Add paper context (truncated)
         messages.append({
             "role": "user",
             "content": f"I'm reading a paper. Here's the content:\n\n{self.pdf_content[:30000]}"
         })
-        
-        # Add conversation history (recent)
+
+        # Add conversation history (recent), filtering out system messages
         for msg in self.messages[-10:]:
-            messages.append(msg)
-        
+            # Skip system messages - API only accepts user/assistant
+            if msg.get("role") != "system":
+                messages.append(msg)
+
         # Add current question
         messages.append({"role": "user", "content": user_input})
-        
+
         response = self.anthropic.messages.create(
             model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
             max_tokens=2000,
             messages=messages
         )
-        
+
         return response.content[0].text
     
     def _flag_last_exchange(self):
