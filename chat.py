@@ -58,11 +58,16 @@ class PaperCompanion:
         self.pdf_content = None
         self.pdf_images = []
         
-        # Load PDF
-        self._load_pdf()
+        # Load one or multiple PDFs
+        if isinstance(self.pdf_path, list):
+            for path in self.pdf_path:
+                self.pdf_path = path
+                self._load_pdf()
+        else:
+            self._load_pdf()
 
-    def _load_from_zotero(self, zotero_input: str) -> Path:
-        """Load PDF from Zotero library (cloud-based, not local)"""
+    def _load_from_zotero(self, zotero_input: str):
+        """Load one or more PDFs from a Zotero item (main + supplements)"""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
@@ -86,42 +91,78 @@ class PaperCompanion:
             console.print("[red]No items found in Zotero[/red]")
             return None
     
-        # If multiple items, let user choose
+        # If multiple Zotero hits, let user choose
         if len(items) > 1:
             item = self._choose_zotero_item(items)
         else:
             item = items[0]
-        
-        self.zotero_item = item
-
-        # Find PDF attachment
-        attachments = self.zot.children(item['key'])
-        pdf_attachment = None
-
-        for att in attachments:
-            if att['data'].get('contentType') == 'application/pdf':
-                pdf_attachment = att
-                break
-        
-        if not pdf_attachment:
-            console.print("[red]No PDF attachment found for this item[/red]")
-            return None
-            
-        # Create a temporary file to store downloaded PDF
-        pdf_temp_path = Path(tempfile.gettempdir()) / f"{item_key}.pdf"
     
-        try:
-            # Download the PDF from Zotero's cloud
-            self.zot.dump(
-                pdf_attachment['key'],
-                filename=pdf_temp_path.name,
-                path=str(pdf_temp_path.parent)
-            )
-            console.print(f"[green]✓ Downloaded PDF from Zotero cloud: {item['data'].get('title', 'Untitled')}[/green]")
-            return pdf_temp_path
-        except Exception as e:
-            console.print(f"[red]Failed to download PDF from Zotero: {e}[/red]")
+        self.zotero_item = item
+        item_key = item['key']
+    
+        # List all attachments and filter for PDFs
+        attachments = self.zot.children(item_key)
+        pdf_attachments = [
+            att for att in attachments
+            if att['data'].get('contentType') == 'application/pdf'
+        ]
+    
+        if not pdf_attachments:
+            console.print("[red]No PDF attachments found for this item[/red]")
             return None
+    
+        # Display all available PDFs
+        table = Table(title=f"PDFs attached to: {item['data'].get('title', 'Untitled')}")
+        table.add_column("#", justify="right")
+        table.add_column("Title")
+        table.add_column("Key")
+        table.add_column("Filename")
+    
+        for idx, att in enumerate(pdf_attachments, start=1):
+            data = att['data']
+            title = data.get('title', 'Untitled')
+            filename = data.get('filename', 'unknown.pdf')
+            table.add_row(str(idx), title, att['key'], filename)
+        console.print(table)
+    
+        # User choice
+        console.print("[cyan]Enter the number of the PDF to load (or 'a' for all):[/cyan]")
+        choice = input("> ").strip().lower()
+    
+        if choice == 'a':
+            selected_pdfs = pdf_attachments
+        else:
+            try:
+                idx = int(choice) - 1
+                selected_pdfs = [pdf_attachments[idx]]
+            except (ValueError, IndexError):
+                console.print("[red]Invalid choice[/red]")
+                return None
+    
+        tmp_dir = Path(tempfile.gettempdir())
+        downloaded_paths = []
+    
+        for att in selected_pdfs:
+            title = att['data'].get('title', 'Untitled')
+            key = att['key']
+            filename = att['data'].get('filename', f"{key}.pdf")
+            pdf_path = tmp_dir / filename
+    
+            try:
+                self.zot.dump(
+                    key,
+                    filename=filename,
+                    path=str(tmp_dir)
+                )
+                console.print(f"[green]✓ Downloaded {title}[/green]")
+                downloaded_paths.append(pdf_path)
+            except Exception as e:
+                console.print(f"[red]Failed to download {title}: {e}[/red]")
+    
+        # Return single path or list
+        if len(downloaded_paths) == 1:
+            return downloaded_paths[0]
+        return downloaded_paths
     
     def _search_zotero_items(self, query: str) -> List:
         """Search Zotero library for items"""
@@ -208,7 +249,7 @@ class PaperCompanion:
     def _load_pdf(self):
         """Extract text and images from PDF"""
         console.print(f"[cyan]Loading PDF: {self.pdf_path.name}[/cyan]")
-        
+    
         doc = fitz.open(self.pdf_path)
         
         # Extract text
