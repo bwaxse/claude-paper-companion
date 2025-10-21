@@ -419,11 +419,10 @@ Here's the paper text:
         )
         
         summary = response.content[0].text
-        
+
         # Store in conversation history
-        self.messages.append({"role": "system", "content": f"Paper loaded: {self.pdf_path.name}"})
         self.messages.append({"role": "assistant", "content": summary})
-        
+
         return summary
     
     def chat_loop(self):
@@ -503,11 +502,9 @@ Here's the paper text:
             "content": f"I'm reading a paper. Here's the content:\n\n{self.pdf_content[:30000]}"
         })
 
-        # Add conversation history (recent), filtering out system messages
+        # Add conversation history (recent)
         for msg in self.messages[-10:]:
-            # Skip system messages - API only accepts user/assistant
-            if msg.get("role") != "system":
-                messages.append(msg)
+            messages.append(msg)
 
         # Add current question
         messages.append({"role": "user", "content": user_input})
