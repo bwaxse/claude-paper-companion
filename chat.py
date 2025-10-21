@@ -635,10 +635,10 @@ Paper content:
             console.print("[red]Usage: /img N (where N is figure number)[/red]")
     
     def extract_insights(self) -> Dict:
-        """Extract structured insights from conversation"""
-        console.print("\n[cyan]Extracting insights from conversation...[/cyan]")
+        """Extract and thematically organize insights from conversation"""
+        console.print("\n[cyan]Extracting and organizing insights...[/cyan]")
         
-        # Prepare conversation summary for extraction
+        # Prepare conversation for extraction
         conv_summary = "\n\n".join([
             f"User: {msg['content']}\nAssistant: {self.messages[i+1]['content']}"
             for i, msg in enumerate(self.messages[:-1:2])
@@ -646,47 +646,48 @@ Paper content:
         ])
         
         flagged_summary = "\n\n".join([
-            f"User: {ex['user']}\nAssistant: {ex['assistant']}"
+            f"[FLAGGED at {ex['timestamp']}]\nUser: {ex['user']}\nAssistant: {ex['assistant']}"
             for ex in self.flagged_exchanges
         ])
         
-        extraction_prompt = f"""Based on our conversation about this paper, extract comprehensive metadata and insights:
-
-CONVERSATION:
-{conv_summary[:10000]}
-
-FLAGGED EXCHANGES:
-{flagged_summary}
-
-Please provide a JSON object with:
-
-BIBLIOGRAPHIC METADATA:
-- title: Full paper title
-- authors: List of author names (format: [{{"firstName": "John", "lastName": "Doe"}}])
-- journal: Journal/conference name
-- journal_abbr: Journal abbreviation if known
-- volume: Volume number
-- issue: Issue number  
-- pages: Page range (e.g., "123-145")
-- date: Publication date (YYYY-MM-DD or YYYY-MM or YYYY)
-- doi: DOI if mentioned
-- arxiv_id: ArXiv ID if applicable
-- pmid: PubMed ID if applicable
-- issn: ISSN if known
-- abstract: Paper abstract or summary
-- language: Language (default "en")
-
-CONVERSATION INSIGHTS:
-- focus_areas: List of topics I specifically focused on
-- key_methods: Technical methods/approaches we discussed
-- main_findings: Key findings we covered in depth
-- user_interests: My specific interests/interpretations/connections
-- limitations: Limitations or weaknesses we discussed
-- open_questions: Unresolved questions from our discussion
-- key_quotes: Most important/insightful exchanges from our conversation
-- potential_applications: Applications or implications I was interested in
-- highlight_suggestions: Passages worth highlighting in Zotero
-"""
+        extraction_prompt = f"""Based on our conversation about this paper, extract insights and organize them THEMATICALLY.
+    
+    CONVERSATION:
+    {conv_summary[:10000]}
+    
+    FLAGGED EXCHANGES (these are especially important):
+    {flagged_summary}
+    
+    Please provide a JSON object with:
+    
+    1. BIBLIOGRAPHIC METADATA (title, authors, journal, doi, etc. as before)
+    
+    2. THEMATICALLY ORGANIZED INSIGHTS:
+       - strengths: List of paper's genuine strengths we discussed
+       - weaknesses: Methodological or conceptual weaknesses identified  
+       - methodological_notes: Specific technical/methods insights
+       - statistical_concerns: Any stats/analysis issues raised
+       - theoretical_contributions: Conceptual advances or frameworks
+       - empirical_findings: Key results and data points discussed
+       - questions_raised: Open questions and uncertainties we explored
+       - applications: Practical implications discussed
+       - connections: Links to other work/ideas mentioned
+       - critiques: Specific critical points made (beyond general weaknesses)
+       - surprising_elements: Unexpected findings or approaches noted
+       
+    3. KEY_QUOTES: The 3-5 most insightful exchanges from our conversation, categorized by theme
+    
+    4. CUSTOM_THEMES: Any recurring themes specific to our discussion that don't fit above
+       (e.g., if we spent a lot of time on "reproducibility" or "ethical implications")
+    
+    5. HIGHLIGHT_SUGGESTIONS: Specific passages to highlight, grouped by:
+       - critical_passages: Must-read sections
+       - questionable_claims: Passages needing scrutiny  
+       - methodological_details: Technical sections of interest
+       - key_findings: Result sections to mark
+    
+    Focus especially on the FLAGGED exchanges as these were marked as important during reading.
+    """
         
         response = self.anthropic.messages.create(
             model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
@@ -781,46 +782,80 @@ CONVERSATION INSIGHTS:
         pass
     
     def _format_insights_html(self, insights: Dict) -> str:
-        """Format insights as HTML for Zotero note"""
-        html = f"""<h2>Claude Analysis - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>
+        """Format thematically organized insights as HTML for Zotero"""
         
-<h3>📍 Focus Areas</h3>
-<ul>
-{''.join(f'<li>{area}</li>' for area in insights.get('focus_areas', []))}
-</ul>
-
-<h3>🔬 Key Methods Discussed</h3>
-<p>{', '.join(insights.get('key_methods', [])) if insights.get('key_methods') else 'No specific methods discussed'}</p>
-
-<h3>📊 Main Findings We Covered</h3>
-<ul>
-{''.join(f'<li>{finding}</li>' for finding in insights.get('main_findings', []))}
-</ul>
-
-<h3>💡 My Specific Interests & Interpretations</h3>
-<p>{'<br>'.join(insights.get('user_interests', [])) if insights.get('user_interests') else 'No specific interests noted'}</p>
-
-<h3>🔍 Suggested Highlights</h3>
-<ul>
-{''.join(f'<li>{highlight}</li>' for highlight in insights.get('highlight_suggestions', [])[:5])}
-</ul>
-
-<h3>⚠️ Limitations Discussed</h3>
-<p>{', '.join(insights.get('limitations', [])) if insights.get('limitations') else 'No limitations discussed'}</p>
-
-<h3>❓ Open Questions</h3>
-<ul>
-{''.join(f'<li>{q}</li>' for q in insights.get('open_questions', []))}
-</ul>
-
-<hr>
-<p><small>
-<em>Session ID: {self.session_id[:16]}</em><br>
-<em>PDF Hash: {self.pdf_hash}</em><br>
-<em>Flagged exchanges: {len(self.flagged_exchanges)}</em><br>
-<em>Total exchanges: {len(self.messages) // 2}</em>
-</small></p>
-"""
+        # Build a dynamic HTML based on which themes have content
+        html = f"""<h2>📚 Paper Insights - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>"""
+        
+        # Define theme display order and icons
+        theme_config = {
+            'strengths': ('💪', 'Strengths'),
+            'weaknesses': ('⚠️', 'Weaknesses & Limitations'),
+            'methodological_notes': ('🔬', 'Methodological Insights'),
+            'statistical_concerns': ('📊', 'Statistical Issues'),
+            'theoretical_contributions': ('💡', 'Theoretical Contributions'),
+            'empirical_findings': ('📈', 'Key Empirical Findings'),
+            'questions_raised': ('❓', 'Open Questions'),
+            'applications': ('🚀', 'Applications & Implications'),
+            'connections': ('🔗', 'Connections to Other Work'),
+            'critiques': ('🎯', 'Specific Critiques'),
+            'surprising_elements': ('😲', 'Surprising Elements'),
+        }
+        
+        # Add themed sections (only if they have content)
+        for theme_key, (icon, title) in theme_config.items():
+            if theme_key in insights and insights[theme_key]:
+                items = insights[theme_key]
+                if items:
+                    html += f"\n<h3>{icon} {title}</h3>\n<ul>\n"
+                    for item in items:
+                        # If this item came from a flagged exchange, mark it
+                        if isinstance(item, dict) and item.get('flagged'):
+                            html += f'<li><strong>⭐ {item["content"]}</strong></li>\n'
+                        else:
+                            html += f'<li>{item}</li>\n'
+                    html += "</ul>\n"
+        
+        # Add custom themes if any emerged
+        if 'custom_themes' in insights:
+            html += "\n<h3>🎨 Session-Specific Themes</h3>\n"
+            for theme, items in insights['custom_themes'].items():
+                html += f"<h4>{theme.replace('_', ' ').title()}</h4>\n<ul>\n"
+                for item in items:
+                    html += f'<li>{item}</li>\n'
+                html += "</ul>\n"
+        
+        # Add key quotes (if any)
+        if insights.get('key_quotes'):
+            html += "\n<h3>💬 Key Exchanges</h3>\n"
+            for quote in insights['key_quotes'][:5]:
+                html += f"""<blockquote style="border-left: 3px solid #ccc; padding-left: 10px; margin: 10px 0;">
+                <strong>Q:</strong> {quote.get('user', '')}
+                <br><strong>A:</strong> {quote.get('assistant', '')}
+                <br><small><em>{quote.get('theme', 'general')}</em></small>
+                </blockquote>\n"""
+        
+        # Add highlight suggestions
+        if insights.get('highlight_suggestions'):
+            html += "\n<h3>📝 Suggested Highlights</h3>\n"
+            for category, suggestions in insights['highlight_suggestions'].items():
+                if suggestions:
+                    html += f"<h4>{category.replace('_', ' ').title()}</h4>\n<ul>\n"
+                    for s in suggestions[:3]:  # Limit to top 3 per category
+                        html += f'<li>{s}</li>\n'
+                    html += "</ul>\n"
+        
+        # Add metadata footer
+        html += f"""
+    <hr>
+    <p><small>
+    <em>Session ID: {self.session_id[:16]}</em><br>
+    <em>Total exchanges: {len(self.messages) // 2}</em><br>
+    <em>Flagged insights: {len(self.flagged_exchanges)}</em><br>
+    <em>Themes identified: {len([k for k in theme_config.keys() if k in insights and insights[k]])}</em>
+    </small></p>
+    """
+        
         return html
     
     def save_local_backup(self, insights: Dict):
