@@ -350,7 +350,8 @@ class PaperCompanion:
                 "type": "text",
                 "text": f"""{context}
     
-    You are a prominent senior scientist reviewing this paper. Be direct and intellectually honest. Please provide a CONCISE 5-bullet summary of this paper's most important aspects.
+    You are a prominent senior scientist reviewing this paper. Be direct and intellectually honest. 
+    Please provide a CONCISE 5-bullet summary of this paper's most important aspects according to your review (i.e. not just according to their text).
     
     Format each bullet as:
     - [ASPECT]: One clear, specific sentence
@@ -359,10 +360,8 @@ class PaperCompanion:
     - Core innovation (if any)
     - Key methodological strength or flaw
     - Most significant finding
-    - Critical limitation
+    - Critical limitation(s)
     - Real-world impact/applicability
-    
-    After the bullets, suggest 2-3 specific aspects the reader might want to explore based on the paper's content.
     
     Paper text:
     {self.pdf_content[:100000]}"""
