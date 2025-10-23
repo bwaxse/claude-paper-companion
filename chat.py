@@ -67,13 +67,34 @@ class PaperCompanion:
             self._load_pdf()
 
     def _load_from_zotero(self, zotero_input: str) -> Path:
-        """Load PDFs from Zotero with granular selection."""
+        """Load the main PDF (Full Text PDF) from Zotero, and optionally supplements."""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
-        
-        # [Previous parsing code remains the same...]
-        
+
+        # Parse input
+        if zotero_input.startswith('zotero:search:'):
+            query = zotero_input.replace('zotero:search:', '')
+            items = self._search_zotero_items(query)
+        elif zotero_input.startswith('zotero:'):
+            item_key = zotero_input.replace('zotero:', '')
+            try:
+                item = self.zot.item(item_key)
+                items = [item] if item else []
+            except Exception as e:
+                console.print(f"[red]Error fetching item from Zotero: {e}[/red]")
+                items = []
+        else:
+            items = []
+    
+        if not items:
+            console.print("[red]No items found in Zotero[/red]")
+            return None
+    
+        # Choose one item if multiple found
+        item = self._choose_zotero_item(items) if len(items) > 1 else items[0]
+        self.zotero_item = item
+    
         # List attachments
         attachments = [a for a in self.zot.children(item['key']) 
                        if a['data'].get('contentType') == 'application/pdf']
