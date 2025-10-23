@@ -108,46 +108,109 @@ class PaperCompanion:
         if not main_pdf:
             main_pdf = attachments[0]  # fallback
     
-        # Ask about supplements
+        # Handle supplement selection
         supplements = [a for a in attachments if a != main_pdf]
+        selected_supplements = []
+        
         if supplements:
-            console.print(f"[yellow]Found {len(supplements)} supplemental PDF(s):[/yellow]")
+            console.print(f"\n[yellow]Found {len(supplements)} supplemental PDF(s):[/yellow]")
+            console.print(f"  0. [Main] {main_pdf['data'].get('title', 'Main PDF')}")
             for i, s in enumerate(supplements, 1):
                 console.print(f"  {i}. {s['data'].get('title', 'Untitled')}")
-    
-            include_supp = Prompt.ask(
-                "Include supplemental files as well?", choices=["y", "n"], default="y"
-            ) == "y"
-        else:
-            include_supp = False
-    
+            
+            console.print("\n[cyan]Options:[/cyan]")
+            console.print("  • Enter numbers to include (e.g., '1,3' or '1-3')")
+            console.print("  • Enter 'all' to include everything")
+            console.print("  • Enter 'none' or press Enter for main PDF only")
+            console.print("  • Enter 'first N' to include first N supplements (e.g., 'first 2')")
+            
+            selection = Prompt.ask("Select supplements", default="none").strip().lower()
+            
+            if selection == 'all':
+                selected_supplements = supplements
+            elif selection == 'none' or selection == '':
+                selected_supplements = []
+            elif selection.startswith('first '):
+                try:
+                    n = int(selection.split()[1])
+                    selected_supplements = supplements[:n]
+                    console.print(f"[green]✓ Including first {n} supplements[/green]")
+                except (ValueError, IndexError):
+                    console.print("[red]Invalid 'first N' format[/red]")
+            else:
+                # Parse specific selections (e.g., "1,3" or "1-3" or "1,2,5-7")
+                selected_indices = self._parse_selection(selection, len(supplements))
+                selected_supplements = [supplements[i-1] for i in selected_indices if 0 < i <= len(supplements)]
+                
+                if selected_supplements:
+                    console.print(f"[green]✓ Selected {len(selected_supplements)} supplement(s)[/green]")
+                else:
+                    console.print("[yellow]No valid selections, using main PDF only[/yellow]")
+        
         # Download PDFs
         temp_dir = Path(tempfile.gettempdir())
         pdf_paths = []
-    
-        def _download_attachment(att):
+        
+        def _download_attachment(att, label="PDF"):
             pdf_temp_path = temp_dir / f"{item['key']}_{att['key']}.pdf"
             try:
                 self.zot.dump(att['key'], filename=pdf_temp_path.name, path=str(temp_dir))
-                console.print(f"[green]✓ Downloaded: {att['data'].get('title', 'Untitled')}[/green]")
+                console.print(f"[green]✓ Downloaded: {label} - {att['data'].get('title', 'Untitled')}[/green]")
                 return pdf_temp_path
             except Exception as e:
                 console.print(f"[red]Failed to download {att['data'].get('title')}: {e}[/red]")
                 return None
-    
-        main_path = _download_attachment(main_pdf)
+        
+        # Download main PDF
+        main_path = _download_attachment(main_pdf, "Main")
         if not main_path:
             return None
-    
-        if include_supp:
-            for supp in supplements:
-                supp_path = _download_attachment(supp)
-                if supp_path:
-                    pdf_paths.append(supp_path)
-    
-        # Combine PDFs’ text later
-        self.supplement_paths = pdf_paths  # store for later loading
+        
+        # Download selected supplements
+        for supp in selected_supplements:
+            supp_path = _download_attachment(supp, "Supplement")
+            if supp_path:
+                pdf_paths.append(supp_path)
+        
+        # Store for later loading
+        self.supplement_paths = pdf_paths
+        
+        # Show summary
+        total_docs = 1 + len(pdf_paths)
+        console.print(f"\n[bold green]Loading {total_docs} document(s) total:[/bold green]")
+        console.print(f"  • 1 main PDF")
+        if pdf_paths:
+            console.print(f"  • {len(pdf_paths)} supplement(s)")
+        
         return main_path
+
+    def _parse_selection(self, selection: str, max_val: int) -> List[int]:
+        """Parse selection string like '1,3,5-7' into list of indices."""
+        indices = set()
+        
+        # Split by comma
+        parts = selection.replace(' ', '').split(',')
+        
+        for part in parts:
+            if '-' in part:
+                # Range selection (e.g., "2-5")
+                try:
+                    start, end = part.split('-')
+                    start, end = int(start), int(end)
+                    if start <= end:
+                        indices.update(range(start, min(end + 1, max_val + 1)))
+                except ValueError:
+                    console.print(f"[yellow]Invalid range: {part}[/yellow]")
+            else:
+                # Single number
+                try:
+                    num = int(part)
+                    if 1 <= num <= max_val:
+                        indices.add(num)
+                except ValueError:
+                    console.print(f"[yellow]Invalid number: {part}[/yellow]")
+        
+        return sorted(list(indices))
 
     def _search_zotero_items(self, query: str) -> List:
         """Search Zotero library for items"""
