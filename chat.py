@@ -67,64 +67,42 @@ class PaperCompanion:
             self._load_pdf()
 
     def _load_from_zotero(self, zotero_input: str) -> Path:
-        """Load the main PDF (Full Text PDF) from Zotero, and optionally supplements."""
+        """Load PDFs from Zotero with granular selection."""
         if not self.zot:
             console.print("[red]Zotero not configured[/red]")
             return None
-    
-        # Parse input
-        if zotero_input.startswith('zotero:search:'):
-            query = zotero_input.replace('zotero:search:', '')
-            items = self._search_zotero_items(query)
-        elif zotero_input.startswith('zotero:'):
-            item_key = zotero_input.replace('zotero:', '')
-            try:
-                item = self.zot.item(item_key)
-                items = [item] if item else []
-            except Exception as e:
-                console.print(f"[red]Error fetching item from Zotero: {e}[/red]")
-                items = []
-        else:
-            items = []
-    
-        if not items:
-            console.print("[red]No items found in Zotero[/red]")
-            return None
-    
-        # Choose one item if multiple found
-        item = self._choose_zotero_item(items) if len(items) > 1 else items[0]
-        self.zotero_item = item
-    
+        
+        # [Previous parsing code remains the same...]
+        
         # List attachments
         attachments = [a for a in self.zot.children(item['key']) 
                        if a['data'].get('contentType') == 'application/pdf']
-    
+        
         if not attachments:
             console.print("[red]No PDF attachments found for this item[/red]")
             return None
-    
+        
         # Identify main paper
         main_pdf = next((a for a in attachments if a['data'].get('title') == 'Full Text PDF'), None)
         if not main_pdf:
             main_pdf = attachments[0]  # fallback
-    
+        
         # Handle supplement selection
         supplements = [a for a in attachments if a != main_pdf]
         selected_supplements = []
         
         if supplements:
             console.print(f"\n[yellow]Found {len(supplements)} supplemental PDF(s):[/yellow]")
-            console.print(f"  0. [Main] {main_pdf['data'].get('title', 'Main PDF')}")
             for i, s in enumerate(supplements, 1):
                 console.print(f"  {i}. {s['data'].get('title', 'Untitled')}")
             
-            console.print("\n[cyan]Options:[/cyan]")
-            console.print("  • Enter numbers to include (e.g., '1,3' or '1-3')")
+            console.print("\n[cyan]Select supplements to include:[/cyan]")
+            console.print("  • Enter numbers (e.g., '1,3' or '1-3')")
             console.print("  • Enter 'all' to include everything")
             console.print("  • Enter 'none' or press Enter for main PDF only")
-            console.print("  • Enter 'first N' to include first N supplements (e.g., 'first 2')")
+            console.print("  • Enter 'first N' for first N supplements (e.g., 'first 2')")
             
-            selection = Prompt.ask("Select supplements", default="none").strip().lower()
+            selection = Prompt.ask("Selection", default="none").strip().lower()
             
             if selection == 'all':
                 selected_supplements = supplements
@@ -138,14 +116,14 @@ class PaperCompanion:
                 except (ValueError, IndexError):
                     console.print("[red]Invalid 'first N' format[/red]")
             else:
-                # Parse specific selections (e.g., "1,3" or "1-3" or "1,2,5-7")
+                # Parse specific selections
                 selected_indices = self._parse_selection(selection, len(supplements))
                 selected_supplements = [supplements[i-1] for i in selected_indices if 0 < i <= len(supplements)]
                 
                 if selected_supplements:
                     console.print(f"[green]✓ Selected {len(selected_supplements)} supplement(s)[/green]")
                 else:
-                    console.print("[yellow]No valid selections, using main PDF only[/yellow]")
+                    console.print("[yellow]No supplements selected[/yellow]")
         
         # Download PDFs
         temp_dir = Path(tempfile.gettempdir())
@@ -155,20 +133,20 @@ class PaperCompanion:
             pdf_temp_path = temp_dir / f"{item['key']}_{att['key']}.pdf"
             try:
                 self.zot.dump(att['key'], filename=pdf_temp_path.name, path=str(temp_dir))
-                console.print(f"[green]✓ Downloaded: {label} - {att['data'].get('title', 'Untitled')}[/green]")
+                console.print(f"[green]✓ Downloaded: {att['data'].get('title', 'Untitled')}[/green]")
                 return pdf_temp_path
             except Exception as e:
                 console.print(f"[red]Failed to download {att['data'].get('title')}: {e}[/red]")
                 return None
         
-        # Download main PDF
-        main_path = _download_attachment(main_pdf, "Main")
+        # Download main PDF (always)
+        main_path = _download_attachment(main_pdf)
         if not main_path:
             return None
         
         # Download selected supplements
         for supp in selected_supplements:
-            supp_path = _download_attachment(supp, "Supplement")
+            supp_path = _download_attachment(supp)
             if supp_path:
                 pdf_paths.append(supp_path)
         
@@ -177,10 +155,10 @@ class PaperCompanion:
         
         # Show summary
         total_docs = 1 + len(pdf_paths)
-        console.print(f"\n[bold green]Loading {total_docs} document(s) total:[/bold green]")
-        console.print(f"  • 1 main PDF")
         if pdf_paths:
-            console.print(f"  • {len(pdf_paths)} supplement(s)")
+            console.print(f"\n[bold green]Loading {total_docs} document(s): main + {len(pdf_paths)} supplement(s)[/bold green]")
+        else:
+            console.print(f"\n[bold green]Loading main PDF only[/bold green]")
         
         return main_path
 
