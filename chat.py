@@ -645,11 +645,10 @@ Here's the paper text:
         messages.append({
             "role": "user",
         "content": f"""I'm analyzing this paper. Be direct and rigorous.
-        
 
 RESPONSE RULES:
 - If I'm wrong: "Wrong." then explain why
-- If I'm right: "Right." then push deeper  
+- If I'm right: "Right." then push deeper
 - If partially right: "Partially correct:" then specify exactly what's right/wrong
 - If the paper's wrong: "The paper's error:" then explain
 - Never use: "Good catch", "Interesting point", "That's a great question"
@@ -658,9 +657,14 @@ RESPONSE RULES:
 - Be precise with technical language
 - If something's overstated, say "This is overstated because..."
 
-Keep responses 1-3 paragraphs. Shorter if the answer is simple.
+LENGTH REQUIREMENT - CRITICAL:
+- Maximum 1-2 SHORT paragraphs per response
+- NO fancy formatting, headers, boxes, or tables
+- If the topic is complex, give a brief answer and say "Ask if you want details on X"
+- The user will ask follow-ups if they want more depth
+- Brevity > completeness
+
 Point to specific sections/figures when relevant.
-If I ask about something specific, dive deep but stay focused, going short paragraph by short paragraph.
 
 Paper content:
 {self.pdf_content[:100000]}"""
@@ -675,7 +679,7 @@ Paper content:
 
         response = self.anthropic.messages.create(
             model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=1000,
+            max_tokens=400,  # Enforce brevity
             temperature=0.6,  # Lower for more consistency
             messages=messages
         )
