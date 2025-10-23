@@ -582,11 +582,23 @@ Here's the paper text:
         # Add paper context (truncated)
         messages.append({
             "role": "user",
-        "content": f"""I'm reading this paper and having a conversation about it. 
+        "content": f"""I'm analyzing this paper. Be direct and rigorous.
         
-Keep responses concise (1-2 short paragraphs max) and conversational. 
-Be specific and actionable. Point to specific sections/figures when relevant.
-If I ask about something specific, dive deep but stay focused, going short paragraph by short paragraph
+
+RESPONSE RULES:
+- If I'm wrong: "Wrong." then explain why
+- If I'm right: "Right." then push deeper  
+- If partially right: "Partially correct:" then specify exactly what's right/wrong
+- If the paper's wrong: "The paper's error:" then explain
+- Never use: "Good catch", "Interesting point", "That's a great question"
+- Assume I understand basics (I'll ask when I don't)—build on ideas, don't re-explain
+- Distinguish: paper's claims vs actual truth vs unknowns
+- Be precise with technical language
+- If something's overstated, say "This is overstated because..."
+
+Keep responses 1-3 paragraphs. Shorter if the answer is simple.
+Point to specific sections/figures when relevant.
+If I ask about something specific, dive deep but stay focused, going short paragraph by short paragraph.
 
 Paper content:
 {self.pdf_content[:100000]}"""
@@ -602,6 +614,7 @@ Paper content:
         response = self.anthropic.messages.create(
             model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
             max_tokens=1000,
+            temperature=0.6,  # Lower for more consistency
             messages=messages
         )
 
