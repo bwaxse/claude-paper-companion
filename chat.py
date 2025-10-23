@@ -551,7 +551,7 @@ Here's the paper text:
     def chat_loop(self):
         """Main interactive chat loop - enhanced with new commands"""
         console.print("\n[bold cyan]Let's explore this paper together. Commands:[/bold cyan]")
-        console.print("  [yellow]/flag[/yellow] - Mark this exchange as important")
+        console.print("  [yellow]/flag [note][/yellow] - Mark this exchange as important (with optional note)")
         console.print("  [yellow]/fullreview[/yellow] - Get comprehensive critical analysis")
         console.print("  [yellow]/methods[/yellow] - Deep dive into methodology")
         console.print("  [yellow]/stats[/yellow] - Statistical analysis check")
@@ -568,8 +568,10 @@ Here's the paper text:
             # Handle commands
             if user_input.lower() == '/exit':
                 break
-            elif user_input.lower() == '/flag':
-                self._flag_last_exchange()
+            elif user_input.lower().startswith('/flag'):
+                # Extract optional note after /flag
+                note = user_input[5:].strip()  # Everything after '/flag'
+                self._flag_last_exchange(note if note else None)
                 continue
             elif user_input.lower() == '/fullreview':
                 response = self.get_full_critical_review()
@@ -680,16 +682,20 @@ Paper content:
 
         return response.content[0].text
     
-    def _flag_last_exchange(self):
-        """Flag the last exchange as important"""
+    def _flag_last_exchange(self, note: Optional[str] = None):
+        """Flag the last exchange as important with an optional note"""
         if len(self.messages) >= 2:
             last_exchange = {
                 "user": self.messages[-2]["content"],
                 "assistant": self.messages[-1]["content"],
                 "timestamp": datetime.now().isoformat()
             }
+            if note:
+                last_exchange["note"] = note
+                console.print(f"[yellow]✓ Exchange flagged: {note}[/yellow]")
+            else:
+                console.print("[yellow]✓ Exchange flagged[/yellow]")
             self.flagged_exchanges.append(last_exchange)
-            console.print("[yellow]✓ Exchange flagged[/yellow]")
         else:
             console.print("[red]No exchange to flag[/red]")
     
@@ -718,7 +724,9 @@ Paper content:
         ])
         
         flagged_summary = "\n\n".join([
-            f"[FLAGGED at {ex['timestamp']}]\nUser: {ex['user']}\nAssistant: {ex['assistant']}"
+            f"[FLAGGED at {ex['timestamp']}]" +
+            (f"\nNote: {ex['note']}" if ex.get('note') else "") +
+            f"\nUser: {ex['user']}\nAssistant: {ex['assistant']}"
             for ex in self.flagged_exchanges
         ])
         
@@ -901,9 +909,10 @@ Paper content:
         if insights.get('key_quotes'):
             html += "\n<h3>💬 Key Exchanges</h3>\n"
             for quote in insights['key_quotes'][:5]:
+                note_html = f"<br><strong>⭐ Note:</strong> <em>{quote.get('note')}</em>" if quote.get('note') else ""
                 html += f"""<blockquote style="border-left: 3px solid #ccc; padding-left: 10px; margin: 10px 0;">
                 <strong>Q:</strong> {quote.get('user', '')}
-                <br><strong>A:</strong> {quote.get('assistant', '')}
+                <br><strong>A:</strong> {quote.get('assistant', '')}{note_html}
                 <br><small><em>{quote.get('theme', 'general')}</em></small>
                 </blockquote>\n"""
         
