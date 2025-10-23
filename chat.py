@@ -118,10 +118,8 @@ class PaperCompanion:
                 console.print(f"  {i}. {s['data'].get('title', 'Untitled')}")
             
             console.print("\n[cyan]Select supplements to include:[/cyan]")
-            console.print("  • Enter numbers (e.g., '1,3' or '1-3')")
-            console.print("  • Enter 'all' to include everything")
+            console.print("  • Enter numbers (e.g., '1,3' or '1-3'), 'all' to include everything, 'first N' for first N supplements (e.g., 'first 2')")
             console.print("  • Enter 'none' or press Enter for main PDF only")
-            console.print("  • Enter 'first N' for first N supplements (e.g., 'first 2')")
             
             selection = Prompt.ask("Selection", default="none").strip().lower()
             
