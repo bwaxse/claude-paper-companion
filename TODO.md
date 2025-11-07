@@ -330,20 +330,6 @@ Comprehensive refactor to add SQLite database, session resumption, intelligent c
 
 ---
 
-## Notes
-
-### Priority Order
-1. **Must Have** - Phases 1-3 (database, repositories, core features)
-2. **Should Have** - Phase 4 (caching, memory management)
-3. **Nice to Have** - Phases 5-6 (refactoring, polish)
-
-### Key Milestones
-- ✅ **Milestone 1**: Database schema complete
-- 🎯 **Milestone 2**: Can create and query papers/sessions
-- 🎯 **Milestone 3**: Session resumption works
-- 🎯 **Milestone 4**: Caching improves performance
-- 🎯 **Milestone 5**: Code is modular and maintainable
-
 ### Testing Strategy
 - Unit tests for each repository
 - Integration tests for workflows
