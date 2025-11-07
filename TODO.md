@@ -17,18 +17,18 @@ Comprehensive refactor to add SQLite database, session resumption, intelligent c
 - [x] Create indexes for common queries
 - [x] Add schema versioning
 
-### 🔄 1.2 Database Initialization
+### ✅ 1.2 Database Initialization
 - [x] Create `db/__init__.py` with connection manager
-- [ ] Create `db/schema.py` for schema creation and versioning
-- [ ] Test database initialization
-- [ ] Add schema upgrade path
+- [x] Create `db/schema.py` for schema creation and versioning
+- [x] Test database initialization (test_db.py with 14 tests)
+- [x] Add schema upgrade path (migration system with apply_migrations, get_migration_info)
 
-### ⏳ 1.3 Migration Scripts
-- [ ] Create `db/migrate.py` for JSON → SQLite migration
-- [ ] Parse existing `~/.paper_companion/sessions/*.json` files
-- [ ] Extract papers, sessions, messages, flags
-- [ ] Preserve timestamps and relationships
-- [ ] Add validation tests
+### ✅ 1.3 Migration Scripts
+- [x] ~~Create `db/migrate.py` for JSON → SQLite migration~~ (Not needed - no existing JSON data)
+- [x] ~~Parse existing `~/.paper_companion/sessions/*.json` files~~ (Not needed)
+- [x] ~~Extract papers, sessions, messages, flags~~ (Not needed)
+- [x] ~~Preserve timestamps and relationships~~ (Not needed)
+- [x] ~~Add validation tests~~ (Not needed)
 
 ---
 
