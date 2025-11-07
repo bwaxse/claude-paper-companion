@@ -4,7 +4,7 @@
 Comprehensive refactor to add SQLite database, session resumption, intelligent caching, and modular architecture.
 
 **Timeline**: ~9 days
-**Current Status**: Phase 1 in progress
+**Current Status**: Phase 2 complete - moving to Phase 3
 
 ---
 
@@ -34,43 +34,53 @@ Comprehensive refactor to add SQLite database, session resumption, intelligent c
 
 ## Phase 2: Storage Abstraction (Day 3)
 
-### ⏳ 2.1 Repository Pattern Interfaces
-- [ ] Create `storage/repository.py` with abstract base classes
-- [ ] Define PaperRepository interface
-- [ ] Define SessionRepository interface
-- [ ] Define CacheRepository interface
-- [ ] Add type hints and documentation
+### ✅ 2.1 Repository Pattern Interfaces
+- [x] Create `storage/repository.py` with abstract base classes
+- [x] Define PaperRepository interface
+- [x] Define SessionRepository interface
+- [x] Define CacheRepository interface
+- [x] Add type hints and documentation
 
-### ⏳ 2.2 SQLite Repository Implementations
-- [ ] Create `storage/paper_repository.py`
-  - [ ] `create()` - Insert new paper
-  - [ ] `find_by_hash()` - Find by PDF hash
-  - [ ] `find_by_zotero_key()` - Find by Zotero key
-  - [ ] `find_by_doi()` - Find by DOI
-  - [ ] `update_metadata()` - Update paper metadata
-  - [ ] `list_all()` - List all papers
+### ✅ 2.2 SQLite Repository Implementations
+- [x] Create `storage/paper_repository.py`
+  - [x] `create()` - Insert new paper
+  - [x] `find_by_hash()` - Find by PDF hash
+  - [x] `find_by_zotero_key()` - Find by Zotero key
+  - [x] `find_by_doi()` - Find by DOI
+  - [x] `update_metadata()` - Update paper metadata
+  - [x] `list_all()` - List all papers
+  - [x] `store_pdf_chunks()` - Store PDF chunks
+  - [x] `store_pdf_images()` - Store PDF images
+  - [x] `search()` - Search papers by title/authors/DOI
 
-- [ ] Create `storage/session_repository.py`
-  - [ ] `create()` - Create new session
-  - [ ] `get_by_id()` - Get session by ID
-  - [ ] `get_messages()` - Get messages for session
-  - [ ] `add_message()` - Add message to session
-  - [ ] `get_active_sessions()` - List active sessions for paper
-  - [ ] `complete_session()` - Mark session as completed
-  - [ ] `add_flag()` - Flag a message exchange
-  - [ ] `get_flags()` - Get flagged exchanges
+- [x] Create `storage/session_repository.py`
+  - [x] `create()` - Create new session
+  - [x] `get_by_id()` - Get session by ID
+  - [x] `get_messages()` - Get messages for session
+  - [x] `add_message()` - Add message to session
+  - [x] `list_for_paper()` - List sessions for paper
+  - [x] `complete_session()` - Mark session as completed
+  - [x] `add_flag()` - Flag a message exchange
+  - [x] `get_flags()` - Get flagged exchanges
+  - [x] `add_insight()` / `add_insights_bulk()` - Add insights
+  - [x] `get_insights()` / `get_insights_grouped()` - Retrieve insights
+  - [x] `get_session_stats()` - Get session statistics
 
-- [ ] Create `storage/cache_repository.py`
-  - [ ] `get()` - Get cached value
-  - [ ] `set()` - Store value in cache
-  - [ ] `invalidate_expired()` - Remove expired entries
-  - [ ] `get_stats()` - Cache hit/miss statistics
-  - [ ] `clear()` - Clear all cache
+- [x] Create `storage/cache_repository.py`
+  - [x] `get()` - Get cached value
+  - [x] `set()` - Store value in cache
+  - [x] `invalidate_expired()` - Remove expired entries
+  - [x] `get_stats()` - Cache hit/miss statistics
+  - [x] `clear()` - Clear all cache
+  - [x] `record_hit()` - Track cache hits
+  - [x] `get_by_type()` - Get entries by cache type
+  - [x] `cleanup_least_used()` - LRU cleanup
 
-### ⏳ 2.3 Testing
-- [ ] Unit tests for each repository
-- [ ] Integration tests for database operations
-- [ ] Test transaction handling
+### ✅ 2.3 Testing
+- [x] Unit tests for each repository (tests/test_repositories.py with 50+ assertions)
+- [x] Integration tests for database operations
+- [x] Test transaction handling and cascade deletes
+- [x] All tests passing ✓
 
 ---
 
