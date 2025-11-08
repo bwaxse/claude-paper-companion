@@ -155,9 +155,9 @@ def list_recent_items(limit=20, compact=None):
         console.print("\n[yellow]Compact mode (narrow terminal)[/yellow]")
     
     console.print("\n[bold]Commands:[/bold]")
-    console.print("  python chat.py zotero:KEY            # Load paper")
-    console.print('  python chat.py "zotero:search:..."   # Search')
-    console.print("  python list_zotero.py 20             # List 20 recent")
+    console.print("  pc zotero:KEY            # Load paper")
+    console.print('  pc "zotero:search:..."   # Search')
+    console.print("  pcl 20                   # List 20 recent")
 
 if __name__ == "__main__":
     import sys
