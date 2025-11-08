@@ -15,14 +15,10 @@ from typing import Dict, List, Optional, Tuple
 import hashlib
 import re
 
-import fitz  # PyMuPDF
 from anthropic import Anthropic
-from pyzotero import zotero
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
 from rich.prompt import Prompt
-from rich.table import Table
 
 # Database imports
 from db import get_db
@@ -30,6 +26,13 @@ from db.schema import initialize_database
 from storage.paper_repository import SQLitePaperRepository
 from storage.session_repository import SQLiteSessionRepository
 from storage.cache_repository import SQLiteCacheRepository
+
+# Extracted modules
+from core.pdf_processor import PDFProcessor
+from core.insights_extractor import InsightsExtractor
+from integrations.zotero_client import ZoteroClient
+from integrations.claude_client import ClaudeClient
+from utils.helpers import format_authors
 
 console = Console()
 
@@ -51,9 +54,10 @@ class PaperCompanion:
         self.session_repo = SQLiteSessionRepository(self.db)
         self.cache_repo = SQLiteCacheRepository(self.db)
 
-        # Initialize APIs
-        self.setup_zotero()
-        self.anthropic = Anthropic()
+        # Initialize clients
+        self.zotero_client = ZoteroClient()
+        self.claude_client = ClaudeClient()
+        self.insights_extractor = InsightsExtractor()
 
         # Session state
         self.zotero_item = None
@@ -65,6 +69,7 @@ class PaperCompanion:
         self.flagged_exchanges = []
         self.pdf_content = None
         self.pdf_images = []
+        self.supplement_paths = []
 
         # Handle resume vs new session
         if resume_session:
@@ -80,14 +85,15 @@ class PaperCompanion:
 
         # Handle different input types
         if pdf_input.startswith('zotero:'):
-            self.pdf_path = self._load_from_zotero(pdf_input)
+            self.pdf_path, self.zotero_item, self.supplement_paths = self.zotero_client.load_from_zotero(pdf_input)
         else:
             self.pdf_path = Path(pdf_input)
+            self.supplement_paths = []
 
         if not self.pdf_path or not self.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_input}")
 
-        self.pdf_hash = self._compute_pdf_hash()
+        self.pdf_hash = PDFProcessor.compute_pdf_hash(self.pdf_path)
 
         # Find or create paper record
         paper = self.paper_repo.find_by_hash(self.pdf_hash)
@@ -101,7 +107,7 @@ class PaperCompanion:
                 data = self.zotero_item['data']
                 metadata = {
                     'title': data.get('title'),
-                    'authors': self._format_authors(data.get('creators', [])),
+                    'authors': format_authors(data.get('creators', [])),
                     'doi': data.get('DOI'),
                     'zotero_key': self.zotero_item['key'],
                     'pdf_path': str(self.pdf_path)
@@ -125,12 +131,14 @@ class PaperCompanion:
         console.print(f"[green]Created session: {self.session_id[:16]}...[/green]")
 
         # Load PDF content
-        if isinstance(self.pdf_path, list):
-            for path in self.pdf_path:
-                self.pdf_path = path
-                self._load_pdf()
-        else:
-            self._load_pdf()
+        self.pdf_content, self.pdf_images = PDFProcessor.load_pdf_with_supplements(
+            self.pdf_path,
+            self.supplement_paths
+        )
+
+        # Show Zotero metadata if available
+        if self.zotero_item:
+            self.zotero_client.show_metadata(self.zotero_item)
 
     def _resume_session(self, session_id: str):
         """Resume an existing session from the database"""
@@ -156,17 +164,17 @@ class PaperCompanion:
 
         # Load PDF if path is available
         if self.pdf_path and self.pdf_path.exists():
-            self._load_pdf()
+            self.pdf_content, self.pdf_images = PDFProcessor.load_pdf_with_supplements(
+                self.pdf_path,
+                self.supplement_paths
+            )
         else:
             console.print("[yellow]PDF file not found - loading from database cache[/yellow]")
             # TODO: Could load cached PDF chunks from database here
 
         # Load Zotero item if available
         if paper.get('zotero_key'):
-            try:
-                self.zotero_item = self.zot.item(paper['zotero_key'])
-            except Exception as e:
-                console.print(f"[yellow]Could not load Zotero item: {e}[/yellow]")
+            self.zotero_item = self.zotero_client.get_item(paper['zotero_key'])
 
         # Load message history
         messages = self.session_repo.get_messages(session_id, include_summaries=False)

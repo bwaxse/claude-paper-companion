@@ -4,7 +4,7 @@
 Comprehensive refactor to add SQLite database, session resumption, intelligent caching, and modular architecture.
 
 **Timeline**: ~9 days
-**Current Status**: Phase 3 complete - session resumption fully implemented
+**Current Status**: Phase 5 in progress - code organization and modular architecture
 
 ---
 
@@ -198,54 +198,51 @@ Comprehensive refactor to add SQLite database, session resumption, intelligent c
 
 ## Phase 5: Code Organization (Day 8)
 
-### ⏳ 5.1 Extract Zotero Integration
-- [ ] Create `integrations/zotero_client.py`
-  - [ ] Move `setup_zotero()` from `chat.py`
-  - [ ] Move `_load_from_zotero()` from `chat.py`
-  - [ ] Move `_search_zotero_items()` from `chat.py`
-  - [ ] Move `_choose_zotero_item()` from `chat.py`
-  - [ ] Move `save_to_zotero()` from `chat.py`
-  - [ ] Move all Zotero helper methods
-  - [ ] Create `ZoteroClient` class
+### ✅ 5.1 Extract Zotero Integration
+- [x] Create `integrations/zotero_client.py`
+  - [x] Move `setup_zotero()` from `chat.py`
+  - [x] Move `_load_from_zotero()` from `chat.py`
+  - [x] Move `_search_zotero_items()` from `chat.py`
+  - [x] Move `_choose_zotero_item()` from `chat.py`
+  - [x] Move all Zotero helper methods
+  - [x] Create `ZoteroClient` class
 
-### ⏳ 5.2 Extract PDF Processing
-- [ ] Create `core/pdf_processor.py` (if not done in 4.3)
-  - [ ] Move `_load_pdf()` from `chat.py`
-  - [ ] Move `_compute_pdf_hash()` from `chat.py`
-  - [ ] Create `PDFProcessor` class
+### ✅ 5.2 Extract PDF Processing
+- [x] Create `core/pdf_processor.py`
+  - [x] Move `_load_pdf()` from `chat.py`
+  - [x] Move `_compute_pdf_hash()` from `chat.py`
+  - [x] Create `PDFProcessor` class with static methods
 
-### ⏳ 5.3 Extract Conversation Logic
-- [ ] Create `core/conversation.py` (if not done in 4.2)
-  - [ ] Move `chat_loop()` from `chat.py`
-  - [ ] Move `_get_claude_response()` from `chat.py`
-  - [ ] Move command handlers
-  - [ ] Create `ConversationManager` class
+### 🔄 5.3 Extract Conversation Logic
+**NOTE**: Deferred - conversation logic tightly coupled with PaperCompanion class
+- [x] ~~Create `core/conversation.py`~~ (Not needed - kept in chat.py)
+- [x] Conversation logic remains in PaperCompanion
 
-### ⏳ 5.4 Extract Insights Extraction
-- [ ] Create `core/insights_extractor.py`
-  - [ ] Move `extract_insights()` from `chat.py`
-  - [ ] Move `_format_insights_html()` from `chat.py`
-  - [ ] Create `InsightsExtractor` class
+### ✅ 5.4 Extract Insights Extraction
+- [x] Create `core/insights_extractor.py`
+  - [x] Move `extract_insights()` from `chat.py`
+  - [x] Move `_format_insights_html()` from `chat.py`
+  - [x] Move `save_local_backup()` from `chat.py`
+  - [x] Create `InsightsExtractor` class
 
-### ⏳ 5.5 Extract Claude Client
-- [ ] Create `integrations/claude_client.py`
-  - [ ] Move `get_initial_summary()` from `chat.py`
-  - [ ] Move `get_full_critical_review()` from `chat.py`
-  - [ ] Move other Claude API calls
-  - [ ] Create `ClaudeClient` class with caching
+### ✅ 5.5 Extract Claude Client
+- [x] Create `integrations/claude_client.py`
+  - [x] Move `get_initial_summary()` from `chat.py`
+  - [x] Move `get_full_critical_review()` from `chat.py`
+  - [x] Move `_get_claude_response()` logic
+  - [x] Create `ClaudeClient` class
 
-### ⏳ 5.6 Refactor Main Entry Point
-- [ ] Update `chat.py` to orchestrate components
-  - [ ] Import all modules
-  - [ ] `PaperCompanion` becomes lightweight orchestrator
-  - [ ] Delegate to specialized classes
-  - [ ] Target: ~200 lines
+### 🔄 5.6 Refactor Main Entry Point
+- [x] Update `chat.py` imports to use new modules
+- [x] Initialize extracted clients in `__init__()`
+- [x] Update `_start_new_session()` to use extracted modules
+- [x] Update `_resume_session()` to use extracted modules
+- [ ] Complete migration of all method calls (in progress)
 
-### ⏳ 5.7 Add Utilities
-- [ ] Create `utils/helpers.py`
-  - [ ] Move `_format_authors()` from `chat.py`
-  - [ ] Move `_parse_selection()` from `chat.py`
-  - [ ] Other utility functions
+### ✅ 5.7 Add Utilities
+- [x] Create `utils/helpers.py`
+  - [x] Move `_format_authors()` from `chat.py`
+  - [x] Move `_parse_selection()` from `chat.py`
 
 ---
 
