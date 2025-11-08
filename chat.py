@@ -15,14 +15,10 @@ from typing import Dict, List, Optional, Tuple
 import hashlib
 import re
 
-import fitz  # PyMuPDF
 from anthropic import Anthropic
-from pyzotero import zotero
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
 from rich.prompt import Prompt
-from rich.table import Table
 
 # Database imports
 from db import get_db
@@ -30,6 +26,13 @@ from db.schema import initialize_database
 from storage.paper_repository import SQLitePaperRepository
 from storage.session_repository import SQLiteSessionRepository
 from storage.cache_repository import SQLiteCacheRepository
+
+# Extracted modules
+from core.pdf_processor import PDFProcessor
+from core.insights_extractor import InsightsExtractor
+from integrations.zotero_client import ZoteroClient
+from integrations.claude_client import ClaudeClient
+from utils.helpers import format_authors
 
 console = Console()
 
@@ -51,9 +54,10 @@ class PaperCompanion:
         self.session_repo = SQLiteSessionRepository(self.db)
         self.cache_repo = SQLiteCacheRepository(self.db)
 
-        # Initialize APIs
-        self.setup_zotero()
-        self.anthropic = Anthropic()
+        # Initialize clients
+        self.zotero_client = ZoteroClient()
+        self.claude_client = ClaudeClient()
+        self.insights_extractor = InsightsExtractor()
 
         # Session state
         self.zotero_item = None
@@ -65,6 +69,7 @@ class PaperCompanion:
         self.flagged_exchanges = []
         self.pdf_content = None
         self.pdf_images = []
+        self.supplement_paths = []
 
         # Handle resume vs new session
         if resume_session:
@@ -80,14 +85,15 @@ class PaperCompanion:
 
         # Handle different input types
         if pdf_input.startswith('zotero:'):
-            self.pdf_path = self._load_from_zotero(pdf_input)
+            self.pdf_path, self.zotero_item, self.supplement_paths = self.zotero_client.load_from_zotero(pdf_input)
         else:
             self.pdf_path = Path(pdf_input)
+            self.supplement_paths = []
 
         if not self.pdf_path or not self.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_input}")
 
-        self.pdf_hash = self._compute_pdf_hash()
+        self.pdf_hash = PDFProcessor.compute_pdf_hash(self.pdf_path)
 
         # Find or create paper record
         paper = self.paper_repo.find_by_hash(self.pdf_hash)
@@ -101,7 +107,7 @@ class PaperCompanion:
                 data = self.zotero_item['data']
                 metadata = {
                     'title': data.get('title'),
-                    'authors': self._format_authors(data.get('creators', [])),
+                    'authors': format_authors(data.get('creators', [])),
                     'doi': data.get('DOI'),
                     'zotero_key': self.zotero_item['key'],
                     'pdf_path': str(self.pdf_path)
@@ -125,12 +131,14 @@ class PaperCompanion:
         console.print(f"[green]Created session: {self.session_id[:16]}...[/green]")
 
         # Load PDF content
-        if isinstance(self.pdf_path, list):
-            for path in self.pdf_path:
-                self.pdf_path = path
-                self._load_pdf()
-        else:
-            self._load_pdf()
+        self.pdf_content, self.pdf_images = PDFProcessor.load_pdf_with_supplements(
+            self.pdf_path,
+            self.supplement_paths
+        )
+
+        # Show Zotero metadata if available
+        if self.zotero_item:
+            self.zotero_client.show_metadata(self.zotero_item)
 
     def _resume_session(self, session_id: str):
         """Resume an existing session from the database"""
@@ -156,17 +164,17 @@ class PaperCompanion:
 
         # Load PDF if path is available
         if self.pdf_path and self.pdf_path.exists():
-            self._load_pdf()
+            self.pdf_content, self.pdf_images = PDFProcessor.load_pdf_with_supplements(
+                self.pdf_path,
+                self.supplement_paths
+            )
         else:
             console.print("[yellow]PDF file not found - loading from database cache[/yellow]")
             # TODO: Could load cached PDF chunks from database here
 
         # Load Zotero item if available
         if paper.get('zotero_key'):
-            try:
-                self.zotero_item = self.zot.item(paper['zotero_key'])
-            except Exception as e:
-                console.print(f"[yellow]Could not load Zotero item: {e}[/yellow]")
+            self.zotero_item = self.zotero_client.get_item(paper['zotero_key'])
 
         # Load message history
         messages = self.session_repo.get_messages(session_id, include_summaries=False)
@@ -522,61 +530,11 @@ class PaperCompanion:
     
     def get_initial_summary(self) -> str:
         """Get Claude's concise, actionable summary of the paper"""
-        console.print("[cyan]Analyzing paper...[/cyan]")
-        
-        # Include Zotero metadata if available
-        context = ""
-        if self.zotero_item:
-            data = self.zotero_item['data']
-            context = f"""This paper is already in your Zotero library with:
-- Title: {data.get('title', 'Unknown')}
-- Authors: {self._format_authors(data.get('creators', []))}
-- Journal: {data.get('publicationTitle', 'Unknown')}
-- DOI: {data.get('DOI', 'None')}
-"""
-        
-        # Prepare content for Claude
-        content = [
-            {
-                "type": "text",
-                "text": f"""{context}
-    
-    You are a prominent senior scientist reviewing this paper. Be direct and intellectually honest. 
-    Please provide a CONCISE 5-bullet summary of this paper's most important aspects according to your review (i.e. not just according to their text).
-    
-    Format each bullet as:
-    - [ASPECT]: One clear, specific sentence
-    
-    Focus on what matters most:
-    - Core innovation (if any)
-    - Key methodological strength or flaw
-    - Most significant finding
-    - Critical limitation(s)
-    - Real-world impact/applicability
-    
-    Paper text:
-    {self.pdf_content[:100000]}"""
-            }
-        ]
-        
-        # Add figures
-        for img in self.pdf_images:
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": img["type"],
-                    "data": img["data"]
-                }
-            })
-        
-        response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=800, #keep it concise
-            messages=[{"role": "user", "content": content}]
+        summary = self.claude_client.get_initial_summary(
+            self.pdf_content,
+            self.pdf_images,
+            self.zotero_item
         )
-        
-        summary = response.content[0].text
 
         # Store in conversation history
         self.messages.append({"role": "assistant", "content": summary})
@@ -585,94 +543,11 @@ class PaperCompanion:
 
     def get_full_critical_review(self) -> str:
         """Get Claude's critical analysis of the paper"""
-        console.print("[cyan]Performing critical analysis...[/cyan]")
-        
-        # Include Zotero metadata if available
-        context = ""
-        if self.zotero_item:
-            data = self.zotero_item['data']
-            context = f"""This paper is already in your Zotero library with:
-- Title: {data.get('title', 'Unknown')}
-- Authors: {self._format_authors(data.get('creators', []))}
-- Journal: {data.get('publicationTitle', 'Unknown')}
-- DOI: {data.get('DOI', 'None')}
-
-Please verify and enhance this metadata if possible.
-"""
-        
-        # Prepare content for Claude
-        content = [
-            {
-                "type": "text",
-                "text": f"""{context}
-
-Please provide a CRITICAL SENIOR SCIENTIST REVIEW of this paper. Be direct and intellectually honest.
-
-## 1. CORE CLAIM ASSESSMENT
-- What is the paper claiming?
-- Is this genuinely novel or incremental dressed as revolutionary?
-- What would a skeptical reviewer ask immediately?
-
-## 2. METHODOLOGICAL SCRUTINY
-- What are they NOT telling us about their methods?
-- Where are the potential p-hacking or cherry-picking risks?
-- What controls are missing?
-- Other concerns (e.g., sample size, statistical power)?
-
-## 3. RESULTS REALITY CHECK
-- Do the results actually support the claims and/or conclusions?
-- Anything in the supplementary materials they hope we won't check?
-- Are effect sizes meaningful or just statistically significant?
-- Any suspicious data patterns? (too clean, missing variance, etc.)
-
-## 4. HIDDEN LIMITATIONS
-- What limitations did they bury in the discussion?
-- What caveats make their findings less generalizable?
-- What would fail to replicate?
-
-## 5. ACTUAL CONTRIBUTION
-- Strip away the hype: what's the real advance here?
-- Who actually benefits from this work?
-- What's the next obvious experiment they didn't do?
-
-## 6. RED FLAGS & CONCERNS
-- Overclaimed findings
-- Conflicts of interest
-- Questionable citations or self-citation padding
-- Technical issues glossed over
-
-## 7. WORTH YOUR TIME?
-- Should you deeply engage with this paper?
-- What specific sections deserve careful scrutiny?
-- What should you highlight for your future self?
-
-Be blunt. Point out bullshit. Identify real insights. Think like a reviewer who's seen every trick.
-
-Here's the paper text:
-
-{self.pdf_content[:100000]}  # Truncate for initial summary
-"""
-            }
-        ]
-        
-        # Add first few images if available
-        for img in self.pdf_images[:6]:
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": img["type"],
-                    "data": img["data"]
-                }
-            })
-        
-        response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=2500,
-            messages=[{"role": "user", "content": content}]
+        summary = self.claude_client.get_full_critical_review(
+            self.pdf_content,
+            self.pdf_images,
+            self.zotero_item
         )
-        
-        summary = response.content[0].text
 
         # Store in conversation history
         self.messages.append({"role": "assistant", "content": summary})
@@ -744,23 +619,16 @@ Here's the paper text:
 
     def _find_related_papers(self):
         """Find related papers in Zotero library"""
-        if not self.zot:
+        if not self.zotero_client.is_configured():
             console.print("[yellow]Zotero not configured[/yellow]")
             return
-        
-        # Get current paper's tags and keywords
+
         if self.zotero_item:
             tags = [t['tag'] for t in self.zotero_item.get('tags', [])]
-            
             console.print(f"[cyan]Searching for papers with similar tags: {', '.join(tags[:5])}[/cyan]")
-            
-            related = []
-            for tag in tags[:3]:  # Search top 3 tags
-                items = self.zot.items(tag=tag, limit=5)
-                for item in items:
-                    if item['key'] != self.zotero_item['key']:
-                        related.append(item)
-            
+
+            related = self.zotero_client.find_related_papers(self.zotero_item)
+
             if related:
                 console.print("\n[bold]Related papers in your library:[/bold]")
                 for item in related[:5]:
@@ -773,53 +641,11 @@ Here's the paper text:
     
     def _get_claude_response(self, user_input: str) -> str:
         """Get response from Claude with full context"""
-        # Build conversation context
-        messages = []
-
-        # Add paper context (truncated)
-        messages.append({
-            "role": "user",
-        "content": f"""I'm analyzing this paper. Be direct and rigorous.
-
-RESPONSE RULES:
-- If I'm wrong: "Wrong." then explain why
-- If I'm right: "Right." then push deeper
-- If partially right: "Partially correct:" then specify exactly what's right/wrong
-- If the paper's wrong: "The paper's error:" then explain
-- Never use: "Good catch", "Interesting point", "That's a great question"
-- Assume I understand basics (I'll ask when I don't)—build on ideas, don't re-explain
-- Distinguish: paper's claims vs actual truth vs unknowns
-- Be precise with technical language
-- If something's overstated, say "This is overstated because..."
-
-LENGTH REQUIREMENT - CRITICAL:
-- Maximum 1-2 SHORT paragraphs per response
-- NO fancy formatting, headers, boxes, or tables
-- If the topic is complex, give a brief answer and say "Ask if you want details on X"
-- The user will ask follow-ups if they want more depth
-- Brevity > completeness
-
-Point to specific sections/figures when relevant.
-
-Paper content:
-{self.pdf_content[:100000]}"""
-    })
-
-        # Add conversation history (recent)
-        for msg in self.messages[-10:]:
-            messages.append(msg)
-
-        # Add current question
-        messages.append({"role": "user", "content": user_input})
-
-        response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=400,  # Enforce brevity
-            temperature=0.6,  # Lower for more consistency
-            messages=messages
+        return self.claude_client.get_response(
+            user_input,
+            self.pdf_content,
+            self.messages
         )
-
-        return response.content[0].text
     
     def _flag_last_exchange(self, note: Optional[str] = None):
         """Flag the last exchange as important with an optional note"""
@@ -867,141 +693,51 @@ Paper content:
     
     def extract_insights(self) -> Dict:
         """Extract and thematically organize insights from conversation"""
-        console.print("\n[cyan]Extracting and organizing insights...[/cyan]")
-        
-        # Prepare conversation for extraction
-        conv_summary = "\n\n".join([
-            f"User: {msg['content']}\nAssistant: {self.messages[i+1]['content']}"
-            for i, msg in enumerate(self.messages[:-1:2])
-            if msg["role"] == "user" and i+1 < len(self.messages)
-        ])
-        
-        flagged_summary = "\n\n".join([
-            f"[FLAGGED at {ex['timestamp']}]" +
-            (f"\nNote: {ex['note']}" if ex.get('note') else "") +
-            f"\nUser: {ex['user']}\nAssistant: {ex['assistant']}"
-            for ex in self.flagged_exchanges
-        ])
-        
-        extraction_prompt = f"""Based on our conversation about this paper, extract insights and organize them THEMATICALLY.
-    
-    CONVERSATION:
-    {conv_summary[:10000]}
-    
-    FLAGGED EXCHANGES (these are especially important):
-    {flagged_summary}
-    
-    Please provide a JSON object with:
-    
-    1. BIBLIOGRAPHIC METADATA (title, authors, journal, doi, etc. as before)
-    
-    2. THEMATICALLY ORGANIZED INSIGHTS:
-       - strengths: List of paper's genuine strengths we discussed
-       - weaknesses: Methodological or conceptual weaknesses identified  
-       - methodological_notes: Specific technical/methods insights
-       - statistical_concerns: Any stats/analysis issues raised
-       - theoretical_contributions: Conceptual advances or frameworks
-       - empirical_findings: Key results and data points discussed
-       - questions_raised: Open questions and uncertainties we explored
-       - applications: Practical implications discussed
-       - connections: Links to other work/ideas mentioned
-       - critiques: Specific critical points made (beyond general weaknesses)
-       - surprising_elements: Unexpected findings or approaches noted
-       
-    3. KEY_QUOTES: The 3-5 most insightful exchanges from our conversation, categorized by theme
-    
-    4. CUSTOM_THEMES: Any recurring themes specific to our discussion that don't fit above
-       (e.g., if we spent a lot of time on "reproducibility" or "ethical implications")
-    
-    5. HIGHLIGHT_SUGGESTIONS: Specific passages to highlight, grouped by:
-       - critical_passages: Must-read sections
-       - questionable_claims: Passages needing scrutiny  
-       - methodological_details: Technical sections of interest
-       - key_findings: Result sections to mark
-    
-    Focus especially on the FLAGGED exchanges as these were marked as important during reading.
-    """
-        
-        response = self.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001", #claude-sonnet-4-5-20250929
-            max_tokens=3000,
-            messages=[{"role": "user", "content": extraction_prompt}]
+        return self.insights_extractor.extract_insights(
+            self.messages,
+            self.flagged_exchanges,
+            self.pdf_path,
+            self.pdf_hash,
+            self.session_id,
+            self.zotero_item
         )
-        
-        # Parse JSON from response
-        response_text = response.content[0].text
-        
-        # Try to extract JSON from the response
-        try:
-            # Look for JSON block in response
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', response_text)
-            if json_match:
-                insights = json.loads(json_match.group())
-            else:
-                insights = json.loads(response_text)
-        except:
-            # Fallback structure
-            insights = {
-                "title": self.pdf_path.stem,
-                "extraction_error": "Failed to parse structured insights",
-                "raw_response": response_text[:500]
-            }
-        
-        # Add metadata
-        insights["pdf_hash"] = self.pdf_hash
-        insights["pdf_path"] = str(self.pdf_path)
-        insights["session_id"] = self.session_id
-        insights["timestamp"] = datetime.now().isoformat()
-        insights["flagged_count"] = len(self.flagged_exchanges)
-        
-        # If loaded from Zotero, add the item key
-        if self.zotero_item:
-            insights["zotero_key"] = self.zotero_item['key']
-        
-        return insights
     
     def save_to_zotero(self, insights: Dict):
         """Save insights as Zotero note"""
-        if not self.zot:
+        if not self.zotero_client.is_configured():
             console.print("[yellow]Zotero not configured - skipping[/yellow]")
             return
-        
+
         console.print("[cyan]Saving to Zotero...[/cyan]")
-        
+
         # Use existing Zotero item if loaded from there
         if self.zotero_item:
-            parent_item = self.zotero_item
-            console.print(f"[green]Using existing item: {parent_item['data'].get('title', 'Untitled')}[/green]")
-            # Update metadata if we found better information
-            self._update_item_metadata(parent_item, insights)
+            console.print(f"[green]Using existing item: {self.zotero_item['data'].get('title', 'Untitled')}[/green]")
+
+            # Create note with insights
+            note_html = InsightsExtractor.format_insights_html(
+                insights,
+                self.session_id,
+                self.messages,
+                self.flagged_exchanges
+            )
+
+            # Build tags
+            tags = [
+                "claude-insights",
+                f"session-{self.session_id[:10]}"
+            ]
+
+            # Add focus area tags
+            if insights.get('focus_areas'):
+                for area in insights['focus_areas'][:2]:
+                    if isinstance(area, str):
+                        tags.append(f"focus:{area[:30]}")
+
+            # Save note using ZoteroClient
+            self.zotero_client.save_note(self.zotero_item, note_html, tags)
         else:
-            # Find or create item
-            parent_item = self._find_or_create_item(insights)
-        
-        if not parent_item:
-            console.print("[red]Failed to create/find Zotero item[/red]")
-            return
-        
-        # Create note with insights
-        note_html = self._format_insights_html(insights)
-        
-        note_template = self.zot.item_template('note')
-        note_template['note'] = note_html
-        note_template['parentItem'] = parent_item['key']
-        note_template['tags'] = [
-            {"tag": "claude-insights"},
-            {"tag": f"session-{self.session_id[:10]}"}
-        ]
-        
-        # Add focus area tags
-        if insights.get('focus_areas'):
-            for area in insights['focus_areas'][:2]:
-                if isinstance(area, str):
-                    note_template['tags'].append({"tag": f"focus:{area[:30]}"})
-        
-        self.zot.create_items([note_template])
-        console.print("[green]✓ Insights saved to Zotero[/green]")
+            console.print("[yellow]No Zotero item - skipping note save[/yellow]")
     
     def _find_or_create_item(self, insights: Dict):
         """Find existing or create new Zotero item"""
@@ -1094,25 +830,14 @@ Paper content:
     
     def save_local_backup(self, insights: Dict):
         """Save JSON backup locally"""
-        backup_dir = Path.home() / '.paper_companion' / 'sessions'
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        
-        filename = f"{self.pdf_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        backup_path = backup_dir / filename
-        
-        # Include full conversation in backup
-        full_data = {
-            "insights": insights,
-            "conversation": self.messages,
-            "flagged_exchanges": self.flagged_exchanges,
-            "pdf_images_count": len(self.pdf_images),
-            "zotero_item_key": self.zotero_item['key'] if self.zotero_item else None
-        }
-        
-        with open(backup_path, 'w') as f:
-            json.dump(full_data, f, indent=2)
-        
-        console.print(f"[green]✓ Backup saved: {backup_path}[/green]")
+        InsightsExtractor.save_local_backup(
+            insights,
+            self.messages,
+            self.flagged_exchanges,
+            self.pdf_path,
+            len(self.pdf_images),
+            self.zotero_item
+        )
 
     def _save_insights_to_db(self, insights: Dict):
         """Save insights to database"""
