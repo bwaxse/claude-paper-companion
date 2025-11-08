@@ -929,7 +929,7 @@ def list_sessions_for_paper(pdf_input: str):
     """List all sessions for a given paper"""
     # Initialize database
     db = get_db()
-    initialize_database(db)
+    ensure_schema(db)
     paper_repo = SQLitePaperRepository(db)
     session_repo = SQLiteSessionRepository(db)
 
@@ -1038,7 +1038,7 @@ Examples:
     if args.resume_last:
         # Resume most recent session for PDF
         db = get_db()
-        initialize_database(db)
+        ensure_schema(db)
         paper_repo = SQLitePaperRepository(db)
         session_repo = SQLiteSessionRepository(db)
 
