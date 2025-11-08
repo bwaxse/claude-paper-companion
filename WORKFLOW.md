@@ -13,7 +13,13 @@ This will:
 - ✓ Create virtual environment (if needed)
 - ✓ Install all dependencies
 - ✓ Configure shell aliases (pc, pcl, pc-activate)
+- ✓ Configure Anthropic API key (prompts if not found)
 - ✓ Initialize database
+
+**Important:** You need an Anthropic API key to use Paper Companion.
+- The setup script will prompt you to enter it
+- If you don't have one, create it at: https://console.anthropic.com/
+- Keys can only be viewed once when created, so save it!
 
 After setup, reload your shell:
 ```bash
@@ -108,6 +114,35 @@ source ~/.bashrc  # or source ~/.zshrc
 Activate the virtual environment:
 ```bash
 pc-activate  # or: source venv/bin/activate
+```
+
+### "Could not resolve authentication method" (API key error)
+You need to set your Anthropic API key:
+
+**Option 1: Add to your shell config (recommended)**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export ANTHROPIC_API_KEY='sk-ant-your-key-here'
+
+# Then reload
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+**Option 2: Set for current session only**
+```bash
+export ANTHROPIC_API_KEY='sk-ant-your-key-here'
+pc zotero:KEY
+```
+
+**Get a new API key:**
+1. Go to https://console.anthropic.com/
+2. Navigate to "API Keys"
+3. Click "Create Key"
+4. Copy the key (you can only see it once!)
+
+**Check if it's set:**
+```bash
+echo $ANTHROPIC_API_KEY
 ```
 
 ### "Permission denied"

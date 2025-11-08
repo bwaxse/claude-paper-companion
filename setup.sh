@@ -90,7 +90,63 @@ else
 fi
 echo ""
 
-# 5. Test database initialization
+# 5. Configure Anthropic API Key
+echo "→ Checking Anthropic API key..."
+echo ""
+
+# Check if API key is already set in environment
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    echo "✓ ANTHROPIC_API_KEY is already set in current environment"
+    API_KEY_SET=true
+# Check if it's in the RC file
+elif grep -q "ANTHROPIC_API_KEY" "$RC_FILE" 2>/dev/null; then
+    echo "✓ ANTHROPIC_API_KEY found in $RC_FILE"
+    API_KEY_SET=true
+else
+    echo "⚠ ANTHROPIC_API_KEY not found"
+    echo ""
+    echo "You need an Anthropic API key to use Paper Companion."
+    echo ""
+    echo "To get a key:"
+    echo "  1. Go to: https://console.anthropic.com/"
+    echo "  2. Sign in to your account"
+    echo "  3. Navigate to 'API Keys'"
+    echo "  4. Click 'Create Key' (keys start with 'sk-ant-...')"
+    echo "  5. Copy the key (you can only see it once!)"
+    echo ""
+    read -p "Do you have an API key to configure now? (y/N): " -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "Enter your Anthropic API key: " API_KEY
+        echo ""
+
+        if [ -n "$API_KEY" ]; then
+            # Add to RC file
+            echo "" >> "$RC_FILE"
+            echo "# Anthropic API key for Paper Companion (added by setup.sh)" >> "$RC_FILE"
+            echo "export ANTHROPIC_API_KEY='$API_KEY'" >> "$RC_FILE"
+            echo "✓ API key added to $RC_FILE"
+            echo ""
+            echo "⚠ Important: Reload your shell or run: source $RC_FILE"
+            API_KEY_SET=true
+        else
+            echo "⚠ No key entered. You'll need to set ANTHROPIC_API_KEY manually."
+            API_KEY_SET=false
+        fi
+    else
+        echo ""
+        echo "○ Skipping API key configuration"
+        echo ""
+        echo "To configure later, add this to $RC_FILE:"
+        echo "  export ANTHROPIC_API_KEY='your-key-here'"
+        echo ""
+        API_KEY_SET=false
+    fi
+fi
+echo ""
+
+# 6. Test database initialization
 echo "→ Testing database initialization..."
 python3 "$SCRIPT_DIR/chat.py" --help > /dev/null 2>&1
 if [ $? -eq 0 ]; then
@@ -100,11 +156,22 @@ else
 fi
 echo ""
 
-# 6. Summary
+# 7. Summary
 echo "========================================="
 echo "Setup Complete! 🎉"
 echo "========================================="
 echo ""
+
+if [ "$API_KEY_SET" = false ]; then
+    echo "⚠ IMPORTANT: You still need to configure your Anthropic API key!"
+    echo ""
+    echo "Add this to $RC_FILE:"
+    echo "  export ANTHROPIC_API_KEY='your-key-here'"
+    echo ""
+    echo "Get your key at: https://console.anthropic.com/"
+    echo ""
+fi
+
 echo "Available commands (after reloading shell):"
 echo ""
 echo "  pc zotero:KEY              # Start paper session"
@@ -114,7 +181,7 @@ echo "  pc --list-recent           # List recent Zotero items"
 echo "  pcl 20                     # List 20 recent items"
 echo "  pc-activate                # Activate virtual environment"
 echo ""
-echo "To activate aliases now, run:"
+echo "To activate changes now, run:"
 echo "  source $RC_FILE"
 echo ""
 echo "Virtual environment location:"
