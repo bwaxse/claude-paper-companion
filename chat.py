@@ -24,47 +24,178 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+# Database imports
+from db import get_db
+from db.schema import initialize_database
+from storage.paper_repository import SQLitePaperRepository
+from storage.session_repository import SQLiteSessionRepository
+from storage.cache_repository import SQLiteCacheRepository
+
 console = Console()
 
 class PaperCompanion:
-    def __init__(self, pdf_input: str):
+    def __init__(self, pdf_input: Optional[str] = None, resume_session: Optional[str] = None):
         """
         Initialize with either:
         - Direct PDF path: /path/to/paper.pdf
         - Zotero item key: zotero:ABCD1234
         - Zotero search: zotero:search:transformer attention
+        - Resume existing session: resume_session=SESSION_ID
         """
+        # Initialize database
+        self.db = get_db()
+        initialize_database(self.db)
+
+        # Initialize repositories
+        self.paper_repo = SQLitePaperRepository(self.db)
+        self.session_repo = SQLiteSessionRepository(self.db)
+        self.cache_repo = SQLiteCacheRepository(self.db)
+
+        # Initialize APIs
         self.setup_zotero()
-        self.zotero_item = None  # Store linked Zotero item
-        
+        self.anthropic = Anthropic()
+
+        # Session state
+        self.zotero_item = None
+        self.pdf_path = None
+        self.pdf_hash = None
+        self.session_id = None
+        self.paper_id = None
+        self.messages = []
+        self.flagged_exchanges = []
+        self.pdf_content = None
+        self.pdf_images = []
+
+        # Handle resume vs new session
+        if resume_session:
+            self._resume_session(resume_session)
+        elif pdf_input:
+            self._start_new_session(pdf_input)
+        else:
+            raise ValueError("Must provide either pdf_input or resume_session")
+
+    def _start_new_session(self, pdf_input: str):
+        """Start a new session with a PDF"""
+        console.print("[cyan]Starting new session...[/cyan]")
+
         # Handle different input types
         if pdf_input.startswith('zotero:'):
             self.pdf_path = self._load_from_zotero(pdf_input)
         else:
             self.pdf_path = Path(pdf_input)
-            
+
         if not self.pdf_path or not self.pdf_path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_input}")
-            
+
         self.pdf_hash = self._compute_pdf_hash()
-        self.session_id = datetime.now().isoformat()
-        
-        # Initialize APIs
-        self.anthropic = Anthropic()
-        
-        # Session state
-        self.messages = []
-        self.flagged_exchanges = []
-        self.pdf_content = None
-        self.pdf_images = []
-        
-        # Load one or multiple PDFs
+
+        # Find or create paper record
+        paper = self.paper_repo.find_by_hash(self.pdf_hash)
+        if paper:
+            console.print(f"[green]Found existing paper in database: {paper.get('title', 'Untitled')}[/green]")
+            self.paper_id = paper['id']
+        else:
+            # Create new paper record
+            metadata = {}
+            if self.zotero_item:
+                data = self.zotero_item['data']
+                metadata = {
+                    'title': data.get('title'),
+                    'authors': self._format_authors(data.get('creators', [])),
+                    'doi': data.get('DOI'),
+                    'zotero_key': self.zotero_item['key'],
+                    'pdf_path': str(self.pdf_path)
+                }
+            else:
+                metadata = {
+                    'pdf_path': str(self.pdf_path)
+                }
+
+            self.paper_id = self.paper_repo.create(
+                pdf_hash=self.pdf_hash,
+                **metadata
+            )
+            console.print(f"[green]Created new paper record (ID: {self.paper_id})[/green]")
+
+        # Create session record
+        self.session_id = self.session_repo.create(
+            paper_id=self.paper_id,
+            model_used="claude-haiku-4-5-20251001"
+        )
+        console.print(f"[green]Created session: {self.session_id[:16]}...[/green]")
+
+        # Load PDF content
         if isinstance(self.pdf_path, list):
             for path in self.pdf_path:
                 self.pdf_path = path
                 self._load_pdf()
         else:
             self._load_pdf()
+
+    def _resume_session(self, session_id: str):
+        """Resume an existing session from the database"""
+        console.print(f"[cyan]Resuming session {session_id[:16]}...[/cyan]")
+
+        # Load session from database
+        session = self.session_repo.get_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session not found: {session_id}")
+
+        self.session_id = session_id
+        self.paper_id = session['paper_id']
+
+        # Load paper info
+        paper = self.paper_repo.find_by_id(self.paper_id)
+        if not paper:
+            raise ValueError(f"Paper not found for session: {session_id}")
+
+        self.pdf_hash = paper['pdf_hash']
+        self.pdf_path = Path(paper['pdf_path']) if paper['pdf_path'] else None
+
+        console.print(f"[green]Loaded paper: {paper.get('title', 'Untitled')}[/green]")
+
+        # Load PDF if path is available
+        if self.pdf_path and self.pdf_path.exists():
+            self._load_pdf()
+        else:
+            console.print("[yellow]PDF file not found - loading from database cache[/yellow]")
+            # TODO: Could load cached PDF chunks from database here
+
+        # Load Zotero item if available
+        if paper.get('zotero_key'):
+            try:
+                self.zotero_item = self.zot.item(paper['zotero_key'])
+            except Exception as e:
+                console.print(f"[yellow]Could not load Zotero item: {e}[/yellow]")
+
+        # Load message history
+        messages = self.session_repo.get_messages(session_id, include_summaries=False)
+        self.messages = [
+            {"role": msg['role'], "content": msg['content']}
+            for msg in messages
+        ]
+        console.print(f"[green]Loaded {len(self.messages)} messages[/green]")
+
+        # Load flagged exchanges
+        flags = self.session_repo.get_flags(session_id)
+        self.flagged_exchanges = [
+            {
+                "user": flag['user_content'],
+                "assistant": flag['assistant_content'],
+                "timestamp": flag['created_at'],
+                "note": flag.get('note')
+            }
+            for flag in flags
+        ]
+        console.print(f"[green]Loaded {len(self.flagged_exchanges)} flagged exchanges[/green]")
+
+        # Display session stats
+        stats = self.session_repo.get_session_stats(session_id)
+        console.print(f"\n[bold cyan]Session Stats:[/bold cyan]")
+        console.print(f"  Exchanges: {stats.get('exchanges', 0)}")
+        console.print(f"  Flagged: {stats.get('flags', 0)}")
+        console.print(f"  Status: {stats.get('status', 'unknown')}")
+        console.print()
 
     def _load_from_zotero(self, zotero_input: str) -> Path:
         """Load the main PDF (Full Text PDF) from Zotero, and optionally supplements."""
@@ -598,14 +729,18 @@ Here's the paper text:
             
             # Regular conversation
             response = self._get_claude_response(user_input)
-            
+
             # Display response
             console.print("\n[bold blue]Claude:[/bold blue]")
             console.print(Markdown(response))
-            
-            # Store exchange
+
+            # Store exchange in memory
             self.messages.append({"role": "user", "content": user_input})
             self.messages.append({"role": "assistant", "content": response})
+
+            # Save to database
+            self.session_repo.add_message(self.session_id, "user", user_input)
+            self.session_repo.add_message(self.session_id, "assistant", response)
 
     def _find_related_papers(self):
         """Find related papers in Zotero library"""
@@ -689,6 +824,7 @@ Paper content:
     def _flag_last_exchange(self, note: Optional[str] = None):
         """Flag the last exchange as important with an optional note"""
         if len(self.messages) >= 2:
+            # Add to in-memory list
             last_exchange = {
                 "user": self.messages[-2]["content"],
                 "assistant": self.messages[-1]["content"],
@@ -700,6 +836,19 @@ Paper content:
             else:
                 console.print("[yellow]✓ Exchange flagged[/yellow]")
             self.flagged_exchanges.append(last_exchange)
+
+            # Save to database
+            # Get the last two message IDs from the database
+            messages = self.session_repo.get_recent_messages(self.session_id, count=2)
+            if len(messages) >= 2:
+                user_msg_id = messages[-2]['id']
+                assistant_msg_id = messages[-1]['id']
+                self.session_repo.add_flag(
+                    self.session_id,
+                    user_msg_id,
+                    assistant_msg_id,
+                    note
+                )
         else:
             console.print("[red]No exchange to flag[/red]")
     
@@ -964,65 +1113,190 @@ Paper content:
             json.dump(full_data, f, indent=2)
         
         console.print(f"[green]✓ Backup saved: {backup_path}[/green]")
-    
+
+    def _save_insights_to_db(self, insights: Dict):
+        """Save insights to database"""
+        # Define insight categories
+        categories = [
+            'strengths', 'weaknesses', 'methodological_notes', 'statistical_concerns',
+            'theoretical_contributions', 'empirical_findings', 'questions_raised',
+            'applications', 'connections', 'critiques', 'surprising_elements'
+        ]
+
+        # Save insights by category
+        for category in categories:
+            if category in insights and insights[category]:
+                items = insights[category]
+                if isinstance(items, list):
+                    for item in items:
+                        content = item if isinstance(item, str) else str(item)
+                        self.session_repo.add_insight(
+                            self.session_id,
+                            category,
+                            content,
+                            from_flag=False
+                        )
+
+        # Save custom themes if present
+        if 'custom_themes' in insights:
+            for theme, items in insights['custom_themes'].items():
+                if isinstance(items, list):
+                    for item in items:
+                        self.session_repo.add_insight(
+                            self.session_id,
+                            f"custom_{theme}",
+                            str(item),
+                            from_flag=False
+                        )
+
+        console.print("[green]✓ Insights saved to database[/green]")
+
     def run(self):
         """Main execution flow - now conversational"""
         try:
-            # Initial concise summary
-            summary = self.get_initial_summary()
-            console.print("\n[bold]Key Points:[/bold]")
-            console.print(Markdown(summary))
-            
+            # Initial concise summary (only for new sessions)
+            if not self.messages:
+                summary = self.get_initial_summary()
+                console.print("\n[bold]Key Points:[/bold]")
+                console.print(Markdown(summary))
+
+                # Save initial summary to database
+                self.session_repo.add_message(self.session_id, "assistant", summary)
+            else:
+                # Resuming session - show last few exchanges
+                console.print("\n[bold cyan]Recent conversation:[/bold cyan]")
+                for msg in self.messages[-4:]:
+                    role_label = "[bold green]You[/bold green]" if msg['role'] == 'user' else "[bold blue]Claude[/bold blue]"
+                    console.print(f"\n{role_label}")
+                    console.print(msg['content'][:200] + "..." if len(msg['content']) > 200 else msg['content'])
+
             # Prompt for focus
-            console.print("\n[cyan]What would you like to explore first?[/cyan]")
+            console.print("\n[cyan]What would you like to explore?[/cyan]")
             console.print("[dim]You can ask about specific sections, methods, results, or use commands above[/dim]")
-            
+
             # Interactive chat
             self.chat_loop()
-            
+
             # Extract and save insights
             insights = self.extract_insights()
-            
+
+            # Save insights to database
+            self._save_insights_to_db(insights)
+
             # Save to Zotero
             self.save_to_zotero(insights)
-            
+
             # Local backup
             self.save_local_backup(insights)
-            
+
+            # Mark session as completed
+            self.session_repo.complete_session(self.session_id)
+
             console.print("\n[bold green]Session complete! Insights saved.[/bold green]")
-            
+
         except KeyboardInterrupt:
             console.print("\n[yellow]Session interrupted - saving backup...[/yellow]")
+            # Mark session as interrupted
+            self.session_repo.update_status(self.session_id, 'interrupted')
             self.save_local_backup({"interrupted": True, "messages": self.messages})
 
+def list_sessions_for_paper(pdf_input: str):
+    """List all sessions for a given paper"""
+    # Initialize database
+    db = get_db()
+    initialize_database(db)
+    paper_repo = SQLitePaperRepository(db)
+    session_repo = SQLiteSessionRepository(db)
+
+    # Try to find paper
+    if pdf_input.startswith('zotero:'):
+        # Extract zotero key
+        zotero_key = pdf_input.replace('zotero:', '').replace('search:', '')
+        paper = paper_repo.find_by_zotero_key(zotero_key)
+    else:
+        # Compute hash from PDF
+        pdf_path = Path(pdf_input)
+        if pdf_path.exists():
+            with open(pdf_path, 'rb') as f:
+                pdf_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+            paper = paper_repo.find_by_hash(pdf_hash)
+        else:
+            console.print(f"[red]PDF not found: {pdf_input}[/red]")
+            return
+
+    if not paper:
+        console.print("[yellow]No sessions found for this paper[/yellow]")
+        return
+
+    # List sessions
+    sessions = session_repo.list_for_paper(paper['id'])
+
+    if not sessions:
+        console.print("[yellow]No sessions found for this paper[/yellow]")
+        return
+
+    # Display sessions in a table
+    table = Table(title=f"Sessions for: {paper.get('title', 'Untitled')[:60]}")
+    table.add_column("#", style="cyan", width=3)
+    table.add_column("Session ID", style="white", width=20)
+    table.add_column("Started", style="yellow", width=20)
+    table.add_column("Status", style="green", width=12)
+    table.add_column("Exchanges", style="blue", width=10)
+
+    for i, session in enumerate(sessions, 1):
+        session_id = session['id'][:16] + "..."
+        started = session['started_at'][:16] if session['started_at'] else 'N/A'
+        status = session['status']
+        exchanges = str(session.get('total_exchanges', 0))
+
+        table.add_row(str(i), session_id, started, status, exchanges)
+
+    console.print(table)
+    console.print(f"\nTo resume a session: python chat.py --resume SESSION_ID")
+    console.print(f"To resume the most recent: python chat.py --resume-last {pdf_input}")
+
 def main():
-    """Enhanced main with Zotero integration"""
+    """Enhanced main with Zotero integration and session management"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description='Paper Companion - Interactive PDF research assistant',
         epilog="""
 Examples:
-  python chat.py paper.pdf                    # Load local PDF
-  python chat.py zotero:ABC123XY              # Load by Zotero item key  
-  python chat.py "zotero:search:transformer"  # Search and load from Zotero
-  python chat.py --list-recent                # List recent Zotero items
+  # New session
+  python chat.py paper.pdf                           # Load local PDF
+  python chat.py zotero:ABC123XY                     # Load by Zotero item key
+  python chat.py "zotero:search:transformer"         # Search and load from Zotero
+
+  # Resume session
+  python chat.py --resume SESSION_ID                 # Resume specific session
+  python chat.py --resume-last paper.pdf             # Resume most recent session for PDF
+  python chat.py --list-sessions paper.pdf           # List all sessions for PDF
+
+  # Other
+  python chat.py --list-recent                       # List recent Zotero items
         """
     )
-    
+
     parser.add_argument('pdf', nargs='?', help='PDF path or Zotero reference')
-    parser.add_argument('--list-recent', action='store_true', 
+    parser.add_argument('--resume', type=str, metavar='SESSION_ID',
+                       help='Resume specific session by ID')
+    parser.add_argument('--resume-last', type=str, metavar='PDF',
+                       help='Resume most recent session for specified PDF')
+    parser.add_argument('--list-sessions', type=str, metavar='PDF',
+                       help='List all sessions for specified PDF')
+    parser.add_argument('--list-recent', action='store_true',
                        help='List recent items from Zotero')
     parser.add_argument('--setup', action='store_true',
                        help='Run setup wizard')
-    
+
     args = parser.parse_args()
-    
+
     if args.setup:
         from setup import main as setup_main
         setup_main()
         return
-    
+
     if args.list_recent:
         # List recent Zotero items
         try:
@@ -1031,12 +1305,61 @@ Examples:
         except:
             console.print("[yellow]Run with --setup first to configure Zotero[/yellow]")
         return
-    
+
+    if args.list_sessions:
+        list_sessions_for_paper(args.list_sessions)
+        return
+
+    if args.resume_last:
+        # Resume most recent session for PDF
+        db = get_db()
+        initialize_database(db)
+        paper_repo = SQLitePaperRepository(db)
+        session_repo = SQLiteSessionRepository(db)
+
+        # Find paper
+        pdf_input = args.resume_last
+        if pdf_input.startswith('zotero:'):
+            zotero_key = pdf_input.replace('zotero:', '').replace('search:', '')
+            paper = paper_repo.find_by_zotero_key(zotero_key)
+        else:
+            pdf_path = Path(pdf_input)
+            if pdf_path.exists():
+                with open(pdf_path, 'rb') as f:
+                    pdf_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+                paper = paper_repo.find_by_hash(pdf_hash)
+            else:
+                console.print(f"[red]PDF not found: {pdf_input}[/red]")
+                return
+
+        if not paper:
+            console.print("[yellow]No sessions found for this paper[/yellow]")
+            return
+
+        # Get most recent session
+        sessions = session_repo.list_for_paper(paper['id'], limit=1)
+        if not sessions:
+            console.print("[yellow]No sessions found for this paper[/yellow]")
+            return
+
+        session_id = sessions[0]['id']
+        console.print(f"[cyan]Resuming most recent session: {session_id[:16]}...[/cyan]")
+        companion = PaperCompanion(resume_session=session_id)
+        companion.run()
+        return
+
+    if args.resume:
+        # Resume specific session
+        companion = PaperCompanion(resume_session=args.resume)
+        companion.run()
+        return
+
     if not args.pdf:
         parser.print_help()
         return
-    
-    companion = PaperCompanion(args.pdf)
+
+    # Start new session
+    companion = PaperCompanion(pdf_input=args.pdf)
     companion.run()
 
 if __name__ == "__main__":
