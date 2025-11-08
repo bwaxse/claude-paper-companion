@@ -22,7 +22,7 @@ from rich.prompt import Prompt
 
 # Database imports
 from db import get_db
-from db.schema import initialize_database
+from db.schema import ensure_schema
 from storage.paper_repository import SQLitePaperRepository
 from storage.session_repository import SQLiteSessionRepository
 from storage.cache_repository import SQLiteCacheRepository
@@ -47,7 +47,7 @@ class PaperCompanion:
         """
         # Initialize database
         self.db = get_db()
-        initialize_database(self.db)
+        ensure_schema(self.db)
 
         # Initialize repositories
         self.paper_repo = SQLitePaperRepository(self.db)
@@ -929,7 +929,7 @@ def list_sessions_for_paper(pdf_input: str):
     """List all sessions for a given paper"""
     # Initialize database
     db = get_db()
-    initialize_database(db)
+    ensure_schema(db)
     paper_repo = SQLitePaperRepository(db)
     session_repo = SQLiteSessionRepository(db)
 
@@ -1038,7 +1038,7 @@ Examples:
     if args.resume_last:
         # Resume most recent session for PDF
         db = get_db()
-        initialize_database(db)
+        ensure_schema(db)
         paper_repo = SQLitePaperRepository(db)
         session_repo = SQLiteSessionRepository(db)
 
