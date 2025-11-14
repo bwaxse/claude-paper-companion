@@ -1,0 +1,22 @@
+# Web Backend Dependencies for Paper Companion
+# Phase A: FastAPI Backend
+
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# AI/ML
+anthropic
+
+# PDF Processing
+pymupdf
+
+# File Upload
+python-multipart
+
+# Configuration
+pydantic-settings
+python-dotenv
+
+# Database
+aiosqlite
