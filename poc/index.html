@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paper Companion PoC</title>
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    
+    <!-- Lit -->
+    <script type="module">
+        import { LitElement, html, css } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
+
+        const API_BASE = 'http://localhost:8000';
+
+        // Main App Component
+        class PaperCompanionApp extends LitElement {
+            static properties = {
+                sessionId: { type: String },
+                filename: { type: String },
+                conversation: { type: Array },
+                pdfUrl: { type: String },
+                activeTab: { type: String },
+                loading: { type: Boolean }
+            };
+
+            static styles = css`
+                :host {
+                    display: flex;
+                    height: 100vh;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                }
+
+                .left-panel {
+                    width: 300px;
+                    border-right: 1px solid #e0e0e0;
+                    display: flex;
+                    flex-direction: column;
+                    background: #f8f9fa;
+                }
+
+                .tabs {
+                    display: flex;
+                    border-bottom: 1px solid #e0e0e0;
+                    background: white;
+                }
+
+                .tab {
+                    flex: 1;
+                    padding: 12px;
+                    border: none;
+                    background: none;
+                    cursor: pointer;
+                    font-size: 14px;
+                    color: #666;
+                }
+
+                .tab.active {
+                    color: #1a73e8;
+                    border-bottom: 2px solid #1a73e8;
+                }
+
+                .tab-content {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 16px;
+                }
+
+                .center-pane {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    background: #525659;
+                }
+
+                .pdf-viewer {
+                    flex: 1;
+                    overflow: auto;
+                    display: flex;
+                    justify-content: center;
+                    padding: 20px;
+                    position: relative;
+                }
+
+                .pdf-container {
+                    position: relative;
+                }
+
+                canvas {
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                    background: white;
+                }
+
+                .textLayer {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    right: 0;
+                    bottom: 0;
+                    overflow: hidden;
+                    opacity: 0.2;
+                    line-height: 1.0;
+                }
+
+                .textLayer > span {
+                    color: transparent;
+                    position: absolute;
+                    white-space: pre;
+                    cursor: text;
+                    transform-origin: 0% 0%;
+                }
+
+                .textLayer ::selection {
+                    background: rgba(26, 115, 232, 0.3);
+                }
+
+                .upload-area {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    color: white;
+                }
+
+                .upload-btn {
+                    padding: 12px 24px;
+                    background: #1a73e8;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 16px;
+                }
+
+                .upload-btn:hover {
+                    background: #1557b0;
+                }
+
+                input[type="file"] {
+                    display: none;
+                }
+
+                .conversation-item {
+                    margin-bottom: 16px;
+                    padding: 12px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+
+                .user-query {
+                    color: #1a73e8;
+                    font-weight: 500;
+                    margin-bottom: 8px;
+                }
+
+                .assistant-response {
+                    color: #333;
+                    line-height: 1.5;
+                    white-space: pre-wrap;
+                }
+
+                .query-input-area {
+                    padding: 16px;
+                    background: white;
+                    border-top: 1px solid #e0e0e0;
+                }
+
+                .query-input {
+                    width: 100%;
+                    padding: 12px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    resize: vertical;
+                    font-family: inherit;
+                }
+
+                .query-btn {
+                    margin-top: 8px;
+                    padding: 8px 16px;
+                    background: #1a73e8;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+
+                .query-btn:disabled {
+                    background: #ccc;
+                    cursor: not-allowed;
+                }
+
+                .loading {
+                    text-align: center;
+                    padding: 20px;
+                    color: #666;
+                }
+
+                .flag-btn {
+                    float: right;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 18px;
+                }
+
+                .flag-btn.flagged {
+                    color: #f4b400;
+                }
+
+                .highlighted-text {
+                    background: #fff3cd;
+                    padding: 8px;
+                    border-radius: 4px;
+                    margin-bottom: 8px;
+                    font-size: 13px;
+                    color: #856404;
+                }
+            `;
+
+            constructor() {
+                super();
+                this.sessionId = null;
+                this.filename = null;
+                this.conversation = [];
+                this.pdfUrl = null;
+                this.activeTab = 'ask';
+                this.loading = false;
+            }
+
+            async handleFileUpload(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                console.log('Uploading file:', file.name);
+                this.loading = true;
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(`${API_BASE}/session/new`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Session created:', data.session_id);
+                    
+                    this.sessionId = data.session_id;
+                    this.filename = data.filename;
+                    this.pdfUrl = URL.createObjectURL(file);
+                    
+                    // Add initial analysis to conversation
+                    this.conversation = [
+                        {
+                            id: 0,
+                            role: 'user',
+                            content: 'Initial analysis'
+                        },
+                        {
+                            id: 1,
+                            role: 'assistant',
+                            content: data.initial_analysis
+                        }
+                    ];
+
+                    this.loading = false;
+                    this.activeTab = 'ask'; // Switch to Ask tab to show initial analysis
+                    
+                    // Render PDF after UI updates
+                    await this.updateComplete;
+                    this.renderPDF();
+                } catch (error) {
+                    console.error('Upload failed:', error);
+                    alert('Failed to upload PDF: ' + error.message);
+                    this.loading = false;
+                }
+            }
+
+            async renderPDF() {
+                if (!this.pdfUrl) return;
+
+                // Wait for the component to render
+                await this.updateComplete;
+                
+                const canvas = this.shadowRoot.querySelector('#pdf-canvas');
+                const textLayerDiv = this.shadowRoot.querySelector('#text-layer');
+                
+                if (!canvas || !textLayerDiv) {
+                    console.error('Canvas or text layer not found');
+                    return;
+                }
+                
+                try {
+                    const pdf = await pdfjsLib.getDocument(this.pdfUrl).promise;
+                    const page = await pdf.getPage(1);
+                    
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    
+                    // Render the canvas (image)
+                    const context = canvas.getContext('2d');
+                    await page.render({ canvasContext: context, viewport }).promise;
+
+                    // Render the text layer (for selection)
+                    const textContent = await page.getTextContent();
+                    
+                    // Clear any existing text layer
+                    textLayerDiv.innerHTML = '';
+                    textLayerDiv.style.width = viewport.width + 'px';
+                    textLayerDiv.style.height = viewport.height + 'px';
+                    
+                    // Render each text item
+                    textContent.items.forEach(item => {
+                        const tx = pdfjsLib.Util.transform(
+                            pdfjsLib.Util.transform(viewport.transform, item.transform),
+                            [1, 0, 0, -1, 0, 0]
+                        );
+                        
+                        const span = document.createElement('span');
+                        span.textContent = item.str;
+                        span.style.left = tx[4] + 'px';
+                        span.style.top = tx[5] + 'px';
+                        span.style.fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]) + 'px';
+                        span.style.fontFamily = item.fontName;
+                        
+                        textLayerDiv.appendChild(span);
+                    });
+
+                    console.log('PDF rendered successfully with text layer');
+
+                    // Listen for text selection
+                    textLayerDiv.addEventListener('mouseup', () => {
+                        const selection = window.getSelection();
+                        const selectedText = selection.toString().trim();
+                        if (selectedText) {
+                            this.selectedText = selectedText;
+                            console.log('Selected text:', this.selectedText);
+                        }
+                    });
+                } catch (error) {
+                    console.error('PDF rendering error:', error);
+                }
+            }
+
+            async handleQuery() {
+                const input = this.shadowRoot.querySelector('.query-input');
+                const query = input.value.trim();
+                if (!query) return;
+
+                this.loading = true;
+
+                try {
+                    const response = await fetch(`${API_BASE}/session/query`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_id: this.sessionId,
+                            query: query,
+                            highlighted_text: this.selectedText || null
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    // Add to conversation
+                    this.conversation = [
+                        ...this.conversation,
+                        {
+                            id: data.exchange_id,
+                            role: 'user',
+                            content: query,
+                            highlighted_text: this.selectedText
+                        },
+                        {
+                            id: data.exchange_id + 1,
+                            role: 'assistant',
+                            content: data.response
+                        }
+                    ];
+
+                    input.value = '';
+                    this.selectedText = null;
+                    this.loading = false;
+                } catch (error) {
+                    console.error('Query failed:', error);
+                    alert('Failed to send query');
+                    this.loading = false;
+                }
+            }
+
+            renderUploadView() {
+                return html`
+                    <div class="upload-area">
+                        <h2>Upload a PDF to begin</h2>
+                        <label class="upload-btn">
+                            Choose PDF
+                            <input type="file" accept=".pdf" @change=${this.handleFileUpload}>
+                        </label>
+                    </div>
+                `;
+            }
+
+            renderConversation() {
+                return html`
+                    ${this.conversation.slice(2).map(msg => html`
+                        ${msg.role === 'user' ? html`
+                            <div class="conversation-item">
+                                ${msg.highlighted_text ? html`
+                                    <div class="highlighted-text">
+                                        "${msg.highlighted_text}"
+                                    </div>
+                                ` : ''}
+                                <div class="user-query">${msg.content}</div>
+                            </div>
+                        ` : html`
+                            <div class="conversation-item">
+                                <button class="flag-btn" @click=${() => this.flagExchange(msg.id)}>
+                                    ★
+                                </button>
+                                <div class="assistant-response">${msg.content}</div>
+                            </div>
+                        `}
+                    `)}
+                `;
+            }
+
+            async flagExchange(exchangeId) {
+                // TODO: Implement flag toggle
+                console.log('Flag exchange:', exchangeId);
+            }
+
+            render() {
+                return html`
+                    <div class="left-panel">
+                        <div class="tabs">
+                            <button class="tab ${this.activeTab === 'outline' ? 'active' : ''}" 
+                                    @click=${() => this.activeTab = 'outline'}>
+                                Outline
+                            </button>
+                            <button class="tab ${this.activeTab === 'concepts' ? 'active' : ''}" 
+                                    @click=${() => this.activeTab = 'concepts'}>
+                                Concepts
+                            </button>
+                            <button class="tab ${this.activeTab === 'ask' ? 'active' : ''}" 
+                                    @click=${() => this.activeTab = 'ask'}>
+                                Ask
+                            </button>
+                        </div>
+                        
+                        <div class="tab-content">
+                            ${this.activeTab === 'ask' ? html`
+                                ${this.sessionId ? html`
+                                    ${this.renderConversation()}
+                                ` : html`
+                                    <div class="loading">Upload a PDF to start</div>
+                                `}
+                            ` : html`
+                                <div class="loading">Coming soon...</div>
+                            `}
+                        </div>
+
+                        ${this.sessionId ? html`
+                            <div class="query-input-area">
+                                <textarea 
+                                    class="query-input" 
+                                    placeholder="Ask about the paper..."
+                                    rows="3"
+                                ></textarea>
+                                <button 
+                                    class="query-btn" 
+                                    @click=${this.handleQuery}
+                                    ?disabled=${this.loading}
+                                >
+                                    ${this.loading ? 'Thinking...' : 'Ask'}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="center-pane">
+                        ${this.sessionId ? html`
+                            <div class="pdf-viewer">
+                                <div class="pdf-container">
+                                    <canvas id="pdf-canvas"></canvas>
+                                    <div id="text-layer" class="textLayer"></div>
+                                </div>
+                            </div>
+                        ` : this.renderUploadView()}
+                    </div>
+                `;
+            }
+        }
+
+        customElements.define('paper-companion-app', PaperCompanionApp);
+    </script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <paper-companion-app></paper-companion-app>
+</body>
+</html>
