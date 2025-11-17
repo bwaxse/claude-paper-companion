@@ -12,7 +12,7 @@ from ..models.zotero import (
     ZoteroNoteRequest,
     ZoteroNoteResponse,
 )
-from ...services import get_zotero_service, get_session_manager
+from ...services import get_zotero_service, get_session_manager, get_insight_extractor
 
 
 router = APIRouter(prefix="/zotero", tags=["zotero"])
@@ -237,24 +237,12 @@ async def save_insights_to_zotero(request: ZoteroNoteRequest):
                 detail=f"Session '{request.session_id}' not found"
             )
 
-        # Build HTML note from session insights
-        # TODO: This should use an insight extraction service (Task 11)
-        # For now, create a basic note with available data
-        note_html = f"""
-        <h1>Paper Analysis - {session.filename}</h1>
+        # Extract insights from session using InsightExtractor
+        insight_service = get_insight_extractor()
+        insights = await insight_service.extract_insights(request.session_id)
 
-        <h2>Initial Analysis</h2>
-        <p>{session.initial_analysis}</p>
-
-        <h2>Session Information</h2>
-        <ul>
-            <li>Session ID: {session.session_id}</li>
-            <li>Created: {session.created_at}</li>
-            <li>Pages: {session.page_count or 'Unknown'}</li>
-        </ul>
-
-        <p><em>Note created by Claude Paper Companion</em></p>
-        """
+        # Format insights as HTML for Zotero
+        note_html = insight_service.format_insights_html(insights)
 
         # Save note to Zotero
         success = await zotero_service.save_insights_to_note(

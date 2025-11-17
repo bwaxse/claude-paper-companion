@@ -24,6 +24,11 @@ from .query_service import (
     get_query_service,
 )
 
+from .insight_extractor import (
+    InsightExtractor,
+    get_insight_extractor,
+)
+
 __all__ = [
     # Session management
     "SessionManager",
@@ -41,4 +46,7 @@ __all__ = [
     # Query service
     "QueryService",
     "get_query_service",
+    # Insight extraction
+    "InsightExtractor",
+    "get_insight_extractor",
 ]
