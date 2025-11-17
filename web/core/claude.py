@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Model configurations
 MODELS = {
     "haiku": "claude-3-5-haiku-20241022",
-    "sonnet": "claude-3-5-sonnet-20241022",
+    "sonnet": "claude-3-5-sonnet-20240620",  # Updated to available version
 }
 
 # Token pricing (per million tokens) - Update as needed
@@ -28,7 +28,7 @@ TOKEN_PRICING = {
         "input": 0.80,  # $0.80 per MTok
         "output": 4.00,  # $4.00 per MTok
     },
-    "claude-3-5-sonnet-20241022": {
+    "claude-3-5-sonnet-20240620": {
         "input": 3.00,  # $3.00 per MTok
         "output": 15.00,  # $15.00 per MTok
     },
