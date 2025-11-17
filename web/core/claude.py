@@ -18,21 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Model configurations
 MODELS = {
-    "haiku": "claude-3-5-haiku-20241022",
-    "sonnet": "claude-3-5-sonnet-20240620",  # Updated to available version
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20250929",
 }
 
-# Token pricing (per million tokens) - Update as needed
-TOKEN_PRICING = {
-    "claude-3-5-haiku-20241022": {
-        "input": 0.80,  # $0.80 per MTok
-        "output": 4.00,  # $4.00 per MTok
-    },
-    "claude-3-5-sonnet-20240620": {
-        "input": 3.00,  # $3.00 per MTok
-        "output": 15.00,  # $15.00 per MTok
-    },
-}
+# Development mode - set to True to use haiku for all queries (cost savings)
+USE_DEV_MODE = True
 
 
 class TokenUsage:
@@ -59,28 +50,15 @@ class TokenUsage:
     def calculate_cost(self, model: str) -> float:
         """
         Calculate total cost based on token usage.
+        Note: Pricing calculation removed. Check Anthropic's pricing page for current rates.
 
         Args:
             model: Model name
 
         Returns:
-            Total cost in dollars
+            Always returns 0.0 (pricing calculation removed)
         """
-        if model not in TOKEN_PRICING:
-            return 0.0
-
-        pricing = TOKEN_PRICING[model]
-
-        # Input cost (cache creation counted as regular input)
-        input_cost = (self.input_tokens + self.cache_creation_tokens) * pricing["input"] / 1_000_000
-
-        # Output cost
-        output_cost = self.output_tokens * pricing["output"] / 1_000_000
-
-        # Cache read tokens are typically cheaper/free (not charged in current pricing)
-        # Update this if cache pricing changes
-
-        return input_cost + output_cost
+        return 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -280,13 +258,17 @@ Paper text:
             user_query: User's question
             pdf_text: Full PDF text content
             conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
-            use_sonnet: Use Sonnet (True) or Haiku (False)
+            use_sonnet: Use Sonnet (True) or Haiku (False) - ignored if USE_DEV_MODE is True
             max_tokens: Maximum tokens in response
 
         Returns:
             Tuple of (response_text, usage_dict)
         """
-        model = MODELS["sonnet"] if use_sonnet else MODELS["haiku"]
+        # In dev mode, always use haiku for cost savings
+        if USE_DEV_MODE:
+            model = MODELS["haiku"]
+        else:
+            model = MODELS["sonnet"] if use_sonnet else MODELS["haiku"]
         logger.info(f"Processing query with {model} (query length: {len(user_query)} chars)")
 
         # Build messages
@@ -362,16 +344,11 @@ Paper content:
         return response_text, usage_stats
 
     def _calculate_call_cost(self, usage: Any, model: str) -> float:
-        """Calculate cost for a single API call."""
-        if model not in TOKEN_PRICING:
-            return 0.0
-
-        pricing = TOKEN_PRICING[model]
-
-        input_cost = usage.input_tokens * pricing["input"] / 1_000_000
-        output_cost = usage.output_tokens * pricing["output"] / 1_000_000
-
-        return input_cost + output_cost
+        """
+        Calculate cost for a single API call.
+        Note: Pricing calculation removed. Check Anthropic's pricing page for current rates.
+        """
+        return 0.0
 
     def get_total_usage(self) -> Dict[str, Any]:
         """
