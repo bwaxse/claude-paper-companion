@@ -24,6 +24,9 @@ from .query import (
 from .zotero import (
     ZoteroItem,
     ZoteroItemSummary,
+    ZoteroItemData,
+    ZoteroCreator,
+    ZoteroTag,
     ZoteroSearchRequest,
     ZoteroSearchResponse,
     ZoteroNoteRequest,
@@ -49,6 +52,9 @@ __all__ = [
     # Zotero models
     "ZoteroItem",
     "ZoteroItemSummary",
+    "ZoteroItemData",
+    "ZoteroCreator",
+    "ZoteroTag",
     "ZoteroSearchRequest",
     "ZoteroSearchResponse",
     "ZoteroNoteRequest",

@@ -5,7 +5,7 @@ Main FastAPI application for Paper Companion.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import sessions, queries
+from .routes import sessions, queries, zotero
 
 
 # Create FastAPI app
@@ -27,6 +27,7 @@ app.add_middleware(
 # Include routers
 app.include_router(sessions.router)
 app.include_router(queries.router)
+app.include_router(zotero.router)
 
 
 @app.get("/")
