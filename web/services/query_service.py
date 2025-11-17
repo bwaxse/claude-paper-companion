@@ -83,29 +83,25 @@ class QueryService:
             history_rows = await cursor.fetchall()
 
         # Build conversation context
-        messages = []
+        conversation_history = []
         for role, content in history_rows:
-            messages.append({
+            conversation_history.append({
                 "role": role,
                 "content": content
             })
 
-        # Add current query
+        # Build current query
         query_content = request.query
         if request.highlighted_text:
             query_content = f"{request.query}\n\nHighlighted text: {request.highlighted_text}"
         if request.page_number:
             query_content += f"\n(Page {request.page_number})"
 
-        messages.append({
-            "role": "user",
-            "content": query_content
-        })
-
         # Get response from Claude
         response_text, usage_stats = await self.claude.query(
-            messages=messages,
-            paper_text=full_text,
+            user_query=query_content,
+            pdf_text=full_text,
+            conversation_history=conversation_history,
             use_sonnet=request.use_sonnet
         )
 
