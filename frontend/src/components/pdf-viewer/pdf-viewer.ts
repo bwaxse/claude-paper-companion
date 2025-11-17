@@ -20,6 +20,7 @@ export class PdfViewer extends LitElement {
   @state() private currentPage = 1;
 
   private renderingPages = new Set<number>();
+  private renderTasks = new Map<number, any>(); // Track active render tasks
   private intersectionObserver?: IntersectionObserver;
 
   static styles = css`
@@ -218,6 +219,13 @@ export class PdfViewer extends LitElement {
       return;
     }
 
+    // Cancel any existing render task for this page
+    const existingTask = this.renderTasks.get(pageNum);
+    if (existingTask) {
+      existingTask.cancel();
+      this.renderTasks.delete(pageNum);
+    }
+
     this.renderingPages.add(pageNum);
 
     try {
@@ -239,7 +247,18 @@ export class PdfViewer extends LitElement {
       canvas.height = viewport.height;
       const context = canvas.getContext('2d');
       if (context) {
-        await page.render({ canvasContext: context, viewport }).promise;
+        const renderTask = page.render({ canvasContext: context, viewport });
+        this.renderTasks.set(pageNum, renderTask);
+
+        try {
+          await renderTask.promise;
+        } catch (err: any) {
+          // Ignore cancellation errors
+          if (err.name === 'RenderingCancelledException') {
+            return;
+          }
+          throw err;
+        }
       }
 
       // Render text layer with proper positioning
@@ -283,10 +302,17 @@ export class PdfViewer extends LitElement {
       console.error(`Error rendering page ${pageNum}:`, err);
     } finally {
       this.renderingPages.delete(pageNum);
+      this.renderTasks.delete(pageNum);
     }
   }
 
   async rerenderVisiblePages() {
+    // Cancel all active render tasks
+    this.renderTasks.forEach((task) => {
+      task.cancel();
+    });
+    this.renderTasks.clear();
+
     // Clear rendering state and re-render visible pages
     this.renderingPages.clear();
     const pageContainers = this.shadowRoot?.querySelectorAll('.page');
