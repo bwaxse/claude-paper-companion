@@ -2,15 +2,16 @@
 
 ## 📊 Status Summary (Last Updated: 2025-11-17)
 
-**Completed Tasks:** 4 of 15
+**Completed Tasks:** 5 of 15
 - ✅ Task 1: Project Setup & Configuration
 - ✅ Task 2: Database Schema & Connection
 - ✅ Task 3: Core PDF Processing
 - ✅ Task 4: Claude Integration
-- ⏳ Task 5: Pydantic Models (IN PROGRESS / NEXT)
-- ⬜ Task 6-15: Not started
+- ✅ Task 5: Pydantic Models
+- ⏳ Task 6: Session Management Service (NEXT)
+- ⬜ Task 7-15: Not started
 
-**Foundation Status:** Core infrastructure complete. Ready to build services and API routes.
+**Foundation Status:** Core infrastructure + API models complete. Ready to build business logic services.
 
 ---
 
@@ -192,34 +193,46 @@ async def get_pdf_hash(pdf_path: str) -> str  # ✅
 - [x] Token counting/tracking for cost monitoring
 - [x] Error handling for rate limits
 
-### Task 5: Pydantic Models
+### Task 5: Pydantic Models ✅ COMPLETED
 **File: `web/api/models/session.py`**
 ```python
-class SessionCreate(BaseModel):
+class SessionCreate(BaseModel):  # ✅
     # For PDF upload or Zotero key
-    
-class SessionResponse(BaseModel):
+
+class SessionResponse(BaseModel):  # ✅
     session_id: str
     filename: str
     initial_analysis: str
     created_at: datetime
-    
-class SessionList(BaseModel):
+
+class SessionList(BaseModel):  # ✅
     sessions: List[SessionResponse]
+
+# Also implemented:
+# - SessionListItem (lightweight for lists)
+# - SessionDetail (with conversation history)
+# - ConversationMessage
+# - SessionMetadata
 ```
 
 **File: `web/api/models/query.py`**
 ```python
-class QueryRequest(BaseModel):
+class QueryRequest(BaseModel):  # ✅
     query: str
     highlighted_text: Optional[str] = None
     page: Optional[int] = None
-    
-class QueryResponse(BaseModel):
+
+class QueryResponse(BaseModel):  # ✅
     exchange_id: int
     response: str
     model_used: str
+
+# Also implemented:
+# - FlagRequest, FlagResponse
+# - Highlight, HighlightList
 ```
+
+**File: `tests/test_models.py`** - ✅ 19 tests passing
 
 ### Task 6: Session Management Service
 **File: `web/services/session_manager.py`**
