@@ -19,6 +19,11 @@ from .zotero_service import (
     list_recent,
 )
 
+from .query_service import (
+    QueryService,
+    get_query_service,
+)
+
 __all__ = [
     # Session management
     "SessionManager",
@@ -33,4 +38,7 @@ __all__ = [
     "search_papers",
     "get_paper_by_key",
     "list_recent",
+    # Query service
+    "QueryService",
+    "get_query_service",
 ]

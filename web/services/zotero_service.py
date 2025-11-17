@@ -10,7 +10,12 @@ from typing import List, Optional, Dict, Any
 import asyncio
 from functools import partial
 
-from pyzotero import zotero
+try:
+    from pyzotero import zotero
+    PYZOTERO_AVAILABLE = True
+except ImportError:
+    PYZOTERO_AVAILABLE = False
+    zotero = None
 
 from ..core.config import get_settings
 from ..api.models.zotero import (
@@ -49,8 +54,8 @@ class ZoteroService:
         self.library_id = library_id or settings.zotero_library_id
         self.library_type = library_type
 
-        # Initialize Zotero client if credentials available
-        if self.api_key and self.library_id:
+        # Initialize Zotero client if credentials available and pyzotero installed
+        if PYZOTERO_AVAILABLE and self.api_key and self.library_id:
             self.zot = zotero.Zotero(self.library_id, self.library_type, self.api_key)
             self._configured = True
         else:
