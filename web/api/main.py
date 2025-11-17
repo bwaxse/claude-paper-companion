@@ -2,18 +2,99 @@
 Main FastAPI application for Paper Companion.
 """
 
-from fastapi import FastAPI
+import logging
+import time
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .routes import sessions, queries, zotero
+from ..core.database import init_database
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+# Lifespan context manager for startup/shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+
+    Handles:
+    - Database initialization on startup
+    - Cleanup on shutdown
+    """
+    # Startup
+    logger.info("Starting Paper Companion API...")
+    try:
+        await init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down Paper Companion API...")
 
 
 # Create FastAPI app
 app = FastAPI(
     title="Paper Companion API",
     description="AI-powered academic paper analysis and conversation",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
+
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """
+    Log all requests with timing information.
+
+    Logs:
+    - HTTP method and path
+    - Client IP
+    - Response status code
+    - Request duration
+    """
+    start_time = time.time()
+
+    # Log request
+    logger.info(
+        f"Request: {request.method} {request.url.path} "
+        f"from {request.client.host if request.client else 'unknown'}"
+    )
+
+    # Process request
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.error(f"Request failed: {e}")
+        raise
+
+    # Log response
+    duration = time.time() - start_time
+    logger.info(
+        f"Response: {response.status_code} "
+        f"for {request.method} {request.url.path} "
+        f"({duration:.3f}s)"
+    )
+
+    return response
+
 
 # Configure CORS
 app.add_middleware(
@@ -23,6 +104,83 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Error handlers
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """
+    Handle HTTP exceptions with consistent JSON response format.
+
+    Returns:
+        JSON response with error details
+    """
+    logger.warning(
+        f"HTTP {exc.status_code}: {exc.detail} "
+        f"for {request.method} {request.url.path}"
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.status_code,
+                "message": exc.detail,
+                "path": str(request.url.path)
+            }
+        }
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Handle request validation errors with detailed error messages.
+
+    Returns:
+        JSON response with validation error details
+    """
+    logger.warning(
+        f"Validation error for {request.method} {request.url.path}: {exc.errors()}"
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": {
+                "code": 422,
+                "message": "Validation error",
+                "details": exc.errors(),
+                "path": str(request.url.path)
+            }
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """
+    Handle unexpected exceptions with generic error response.
+
+    Returns:
+        JSON response with generic error message
+    """
+    logger.error(
+        f"Unhandled exception for {request.method} {request.url.path}: {exc}",
+        exc_info=True
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": {
+                "code": 500,
+                "message": "Internal server error",
+                "path": str(request.url.path)
+            }
+        }
+    )
+
 
 # Include routers
 app.include_router(sessions.router)
