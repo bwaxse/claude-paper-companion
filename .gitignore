@@ -20,6 +20,8 @@ ENV/
 *.pdf
 sessions/
 cache/
+.env
+paper_companion.db
 
 # Logs
 *.log
