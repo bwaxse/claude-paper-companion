@@ -4,12 +4,14 @@ Main FastAPI application for Paper Companion.
 
 import logging
 import time
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .routes import sessions, queries, zotero
@@ -188,14 +190,24 @@ app.include_router(queries.router)
 app.include_router(zotero.router)
 
 
-@app.get("/")
-async def root():
-    """Root endpoint - API health check."""
-    return {
-        "status": "ok",
-        "service": "Paper Companion API",
-        "version": "0.1.0"
-    }
+# Serve static frontend files
+# Look for frontend/dist directory relative to project root
+frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    logger.info(f"Serving static frontend from {frontend_dist}")
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
+else:
+    logger.warning(f"Frontend dist directory not found at {frontend_dist}")
+
+    @app.get("/")
+    async def root():
+        """Root endpoint - API health check."""
+        return {
+            "status": "ok",
+            "service": "Paper Companion API",
+            "version": "0.1.0",
+            "note": "Frontend not available - run 'npm run build' in frontend/"
+        }
 
 
 @app.get("/health")
