@@ -32,7 +32,8 @@ class DatabaseManager:
             db_path: Path to SQLite database file. If None, uses settings.
         """
         self._db_path = db_path or get_settings().database_path
-        self._connection: Optional[aiosqlite.Connection] = None
+        self._is_memory = (db_path == ":memory:")
+        self._persistent_connection: Optional[aiosqlite.Connection] = None
         self._lock = asyncio.Lock()
 
     @property
@@ -55,14 +56,23 @@ class DatabaseManager:
 
         schema_sql = schema_path.read_text()
 
-        # Execute schema
-        async with self.get_connection() as db:
-            # Enable foreign keys
-            await db.execute("PRAGMA foreign_keys = ON")
+        # For in-memory databases, we need to keep a persistent connection
+        # Otherwise each connection creates a new database
+        if self._is_memory and self._persistent_connection is None:
+            self._persistent_connection = await aiosqlite.connect(self._db_path)
+            self._persistent_connection.row_factory = aiosqlite.Row
 
-            # Execute schema (split by semicolon for multiple statements)
-            await db.executescript(schema_sql)
-            await db.commit()
+        # Execute schema
+        if self._is_memory:
+            conn = self._persistent_connection
+            await conn.executescript(f"PRAGMA foreign_keys = ON;\n{schema_sql}")
+        else:
+            # For file databases, use a temporary connection
+            conn = await aiosqlite.connect(self._db_path)
+            try:
+                await conn.executescript(f"PRAGMA foreign_keys = ON;\n{schema_sql}")
+            finally:
+                await conn.close()
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
@@ -77,18 +87,23 @@ class DatabaseManager:
                 cursor = await db.execute("SELECT * FROM sessions")
                 rows = await cursor.fetchall()
         """
-        conn = await aiosqlite.connect(self._db_path)
+        # For in-memory databases, reuse persistent connection
+        if self._is_memory:
+            if self._persistent_connection is None:
+                self._persistent_connection = await aiosqlite.connect(self._db_path)
+                self._persistent_connection.row_factory = aiosqlite.Row
+                await self._persistent_connection.execute("PRAGMA foreign_keys = ON")
+            yield self._persistent_connection
+        else:
+            # For file databases, create new connection each time
+            conn = await aiosqlite.connect(self._db_path)
+            await conn.execute("PRAGMA foreign_keys = ON")
+            conn.row_factory = aiosqlite.Row
 
-        # Enable foreign keys
-        await conn.execute("PRAGMA foreign_keys = ON")
-
-        # Enable row factory for dict-like access
-        conn.row_factory = aiosqlite.Row
-
-        try:
-            yield conn
-        finally:
-            await conn.close()
+            try:
+                yield conn
+            finally:
+                await conn.close()
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[aiosqlite.Connection, None]:
