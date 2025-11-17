@@ -28,7 +28,9 @@ export class AppRoot extends LitElement {
     }
 
     .left-panel {
-      width: 300px;
+      width: 450px;
+      min-width: 450px;
+      flex-shrink: 0;
       border-right: 1px solid #e0e0e0;
       display: flex;
       flex-direction: column;
