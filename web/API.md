@@ -199,6 +199,215 @@ This paper introduces...
 
 ---
 
+### Get Session PDF
+
+Serve the PDF file for browser viewing.
+
+**Endpoint:** `GET /sessions/{session_id}/pdf`
+
+**Response:** `200 OK`
+```
+Content-Type: application/pdf
+Content-Disposition: inline; filename="paper.pdf"
+
+<PDF binary data>
+```
+
+**Use Cases:**
+- Display PDF in browser using PDF.js
+- Enable text selection and highlighting in frontend
+- Multi-page rendering with text layer overlay
+
+**Errors:**
+- `404`: Session not found
+- `404`: PDF file not found at stored path
+
+**Example:**
+```html
+<!-- Frontend PDF.js integration -->
+<iframe src="http://localhost:8000/sessions/abc123/pdf"
+        width="100%" height="800px">
+</iframe>
+```
+
+---
+
+### Get Session Outline
+
+Get extracted table of contents / document outline.
+
+**Endpoint:** `GET /sessions/{session_id}/outline`
+
+**Response:** `200 OK`
+```json
+{
+  "outline": [
+    {
+      "level": 1,
+      "title": "Introduction",
+      "page": 1
+    },
+    {
+      "level": 2,
+      "title": "Background",
+      "page": 2
+    },
+    {
+      "level": 2,
+      "title": "Related Work",
+      "page": 3
+    },
+    {
+      "level": 1,
+      "title": "Methods",
+      "page": 5
+    },
+    {
+      "level": 2,
+      "title": "Experimental Setup",
+      "page": 6
+    },
+    {
+      "level": 1,
+      "title": "Results",
+      "page": 8
+    },
+    {
+      "level": 1,
+      "title": "Conclusion",
+      "page": 12
+    }
+  ]
+}
+```
+
+**Use Cases:**
+- Display navigation tree in Outline tab
+- Enable quick jump to sections
+- Show document structure
+
+**Notes:**
+- Outline is extracted from PDF's embedded table of contents
+- If PDF has no TOC, returns empty array
+- `level` indicates heading hierarchy (1 = top level, 2 = subsection, etc.)
+- `page` is 1-indexed page number
+
+**Errors:**
+- `404`: Session not found
+- `404`: PDF file not found
+
+---
+
+### Get Session Concepts
+
+Get key concepts and insights from the conversation.
+
+**Endpoint:** `GET /sessions/{session_id}/concepts`
+
+**Response:** `200 OK`
+```json
+{
+  "bibliographic": {
+    "title": "Attention Is All You Need",
+    "authors": "Vaswani et al.",
+    "journal": "NeurIPS",
+    "year": "2017",
+    "doi": "10.48550/arXiv.1706.03762"
+  },
+  "strengths": [
+    "Novel architecture that doesn't rely on recurrence",
+    "Parallelizable training leads to significant speedups",
+    "Strong empirical results on translation tasks"
+  ],
+  "weaknesses": [
+    "High memory requirements for long sequences",
+    "Limited evaluation on non-translation tasks"
+  ],
+  "methodological_notes": [
+    "Multi-head attention allows model to attend to different positions",
+    "Positional encodings use sin/cos functions"
+  ],
+  "theoretical_contributions": [
+    "Self-attention as primary mechanism for sequence modeling",
+    "Demonstration that attention alone is sufficient"
+  ],
+  "empirical_findings": [
+    "Achieved state-of-the-art BLEU scores on WMT 2014",
+    "Training time reduced from days to hours"
+  ],
+  "questions_raised": [
+    "How does it perform on very long sequences (>1000 tokens)?",
+    "Can it be adapted for other modalities like images?"
+  ],
+  "key_quotes": [
+    {
+      "user": "How does positional encoding work?",
+      "assistant": "The model uses sine and cosine functions...",
+      "theme": "methodological",
+      "note": "Core architectural detail"
+    }
+  ],
+  "custom_themes": {
+    "computational_efficiency": [
+      "Parallelization is key advantage over RNNs",
+      "O(1) sequential operations vs O(n) for RNNs"
+    ]
+  },
+  "highlight_suggestions": {
+    "critical_passages": [
+      "Section 3.1 on scaled dot-product attention"
+    ],
+    "questionable_claims": [],
+    "methodological_details": [
+      "Figure 2 showing model architecture"
+    ],
+    "key_findings": [
+      "Table 2 with BLEU scores"
+    ]
+  },
+  "metadata": {
+    "session_id": "abc123",
+    "filename": "attention_is_all_you_need.pdf",
+    "extracted_at": "2025-01-15T12:00:00",
+    "total_exchanges": 8,
+    "flagged_count": 2,
+    "highlights_count": 5,
+    "model_used": "claude-haiku-4-5-20251001"
+  }
+}
+```
+
+**Use Cases:**
+- Display organized insights in Concepts tab
+- Show thematic analysis of conversation
+- Enable quick review of important points
+- Export structured insights
+
+**Notes:**
+- Insights are extracted using Claude (Haiku) from conversation history
+- Focuses on flagged exchanges as they're marked important
+- Extraction happens on-demand (not cached)
+- May take a few seconds for sessions with long conversations
+
+**Thematic Categories:**
+- `strengths`: Paper's genuine strengths identified
+- `weaknesses`: Methodological or conceptual limitations
+- `methodological_notes`: Technical insights about methods
+- `statistical_concerns`: Stats/analysis issues (if any)
+- `theoretical_contributions`: Conceptual advances
+- `empirical_findings`: Key results discussed
+- `questions_raised`: Open questions from conversation
+- `applications`: Practical implications
+- `connections`: Links to other work mentioned
+- `critiques`: Specific critical points
+- `surprising_elements`: Unexpected findings noted
+
+**Errors:**
+- `404`: Session not found
+- `500`: Insight extraction failed
+
+---
+
 ## Queries API
 
 ### Query Paper
@@ -683,6 +892,12 @@ See `examples/` directory for:
 ---
 
 ## Changelog
+
+### v0.2.0 (2025-11-17)
+- **NEW**: PDF serving endpoint (`GET /sessions/{id}/pdf`)
+- **NEW**: Outline extraction endpoint (`GET /sessions/{id}/outline`)
+- **NEW**: Concepts/insights endpoint (`GET /sessions/{id}/concepts`)
+- Frontend integration support for Phase B
 
 ### v0.1.0 (2025-01-15)
 - Initial release

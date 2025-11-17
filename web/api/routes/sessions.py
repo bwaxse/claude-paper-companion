@@ -2,8 +2,10 @@
 FastAPI routes for session management.
 """
 
+from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from fastapi.responses import FileResponse
 
 from ..models import (
     SessionCreate,
@@ -18,6 +20,9 @@ from ...services import (
     list_sessions as service_list_sessions,
     delete_session as service_delete_session,
 )
+from ...core.pdf_processor import PDFProcessor
+from ...services.insight_extractor import get_insight_extractor
+from ...core.database import get_db_manager
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -254,4 +259,195 @@ async def export_session(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to export session: {str(e)}"
+        )
+
+
+@router.get("/{session_id}/pdf")
+async def get_session_pdf(session_id: str):
+    """
+    Serve the PDF file for browser viewing.
+
+    **Args:**
+    - session_id: Session identifier
+
+    **Returns:**
+    - PDF file with appropriate content-type header
+
+    **Raises:**
+    - 404: If session or PDF file not found
+
+    **Use case:**
+    - Display PDF in browser using PDF.js
+    - Enable text selection and highlighting in frontend
+    - Direct PDF access for multi-page rendering
+    """
+    try:
+        # Get session from database to retrieve pdf_path
+        db = get_db_manager()
+        session_row = await db.execute_one(
+            "SELECT session_id, filename, pdf_path FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+
+        if not session_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session not found: {session_id}"
+            )
+
+        # Get PDF path
+        pdf_path = dict(session_row).get("pdf_path")
+        if not pdf_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"PDF file path not found for session: {session_id}"
+            )
+
+        # Check if file exists
+        pdf_file = Path(pdf_path)
+        if not pdf_file.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"PDF file not found at path: {pdf_path}"
+            )
+
+        # Return PDF file with proper content type
+        return FileResponse(
+            path=pdf_path,
+            media_type="application/pdf",
+            filename=dict(session_row).get("filename", "paper.pdf")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to serve PDF: {str(e)}"
+        )
+
+
+@router.get("/{session_id}/outline")
+async def get_session_outline(session_id: str):
+    """
+    Get extracted table of contents / document outline.
+
+    **Args:**
+    - session_id: Session identifier
+
+    **Returns:**
+    - List of outline items with level, title, and page number
+    - Example:
+      ```json
+      [
+        {"level": 1, "title": "Introduction", "page": 1},
+        {"level": 2, "title": "Background", "page": 2},
+        {"level": 1, "title": "Methods", "page": 5}
+      ]
+      ```
+
+    **Raises:**
+    - 404: If session or PDF file not found
+
+    **Use case:**
+    - Display navigation tree in Outline tab
+    - Enable quick jump to sections
+    - Show document structure
+    """
+    try:
+        # Get session from database to retrieve pdf_path
+        db = get_db_manager()
+        session_row = await db.execute_one(
+            "SELECT session_id, pdf_path FROM sessions WHERE session_id = ?",
+            (session_id,)
+        )
+
+        if not session_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session not found: {session_id}"
+            )
+
+        # Get PDF path
+        pdf_path = dict(session_row).get("pdf_path")
+        if not pdf_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"PDF file path not found for session: {session_id}"
+            )
+
+        # Check if file exists
+        pdf_file = Path(pdf_path)
+        if not pdf_file.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"PDF file not found at path: {pdf_path}"
+            )
+
+        # Extract outline using PDFProcessor
+        outline = await PDFProcessor.extract_outline(pdf_path)
+
+        return {"outline": outline}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract outline: {str(e)}"
+        )
+
+
+@router.get("/{session_id}/concepts")
+async def get_session_concepts(session_id: str):
+    """
+    Get key concepts and insights from the conversation.
+
+    **Args:**
+    - session_id: Session identifier
+
+    **Returns:**
+    - Structured insights including:
+      - strengths: Paper's genuine strengths
+      - weaknesses: Methodological/conceptual weaknesses
+      - methodological_notes: Technical insights
+      - theoretical_contributions: Conceptual advances
+      - empirical_findings: Key results discussed
+      - key_quotes: Most insightful exchanges
+      - And more thematic categories
+
+    **Raises:**
+    - 404: If session not found
+
+    **Use case:**
+    - Display key concepts in Concepts tab
+    - Show organized insights from conversation
+    - Enable quick review of important points
+    """
+    try:
+        # Check if session exists
+        session = await service_get_session(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session not found: {session_id}"
+            )
+
+        # Extract insights using InsightExtractor
+        extractor = get_insight_extractor()
+        insights = await extractor.extract_insights(session_id)
+
+        return insights
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract concepts: {str(e)}"
         )
