@@ -201,8 +201,8 @@ export class AskTab extends LitElement {
   }
 
   private renderConversation() {
-    // Filter out the initial analysis (first exchange)
-    const conversationMessages = this.conversation.filter((msg) => msg.id !== 0);
+    // Filter out the initial analysis (id 0 = user prompt, id 1 = assistant analysis)
+    const conversationMessages = this.conversation.filter((msg) => msg.id > 1);
 
     if (conversationMessages.length === 0) {
       return html`

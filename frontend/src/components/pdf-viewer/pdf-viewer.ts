@@ -242,7 +242,7 @@ export class PdfViewer extends LitElement {
         await page.render({ canvasContext: context, viewport }).promise;
       }
 
-      // Render text layer
+      // Render text layer with proper positioning
       const textContent = await page.getTextContent();
       textLayerDiv.innerHTML = '';
       textLayerDiv.style.width = viewport.width + 'px';
@@ -250,17 +250,28 @@ export class PdfViewer extends LitElement {
 
       textContent.items.forEach((item: any) => {
         if (item.str) {
-          const tx = pdfjsLib.Util.transform(
-            pdfjsLib.Util.transform(viewport.transform, item.transform),
-            [1, 0, 0, -1, 0, 0]
-          );
-
           const span = document.createElement('span');
           span.textContent = item.str;
-          span.style.left = tx[4] + 'px';
-          span.style.top = tx[5] + 'px';
-          span.style.fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]) + 'px';
+
+          // Calculate proper transform
+          const transform = pdfjsLib.Util.transform(
+            viewport.transform,
+            item.transform
+          );
+
+          // Extract position and scale
+          const angle = Math.atan2(transform[1], transform[0]);
+          const fontHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
+
+          // Position the span
+          span.style.left = transform[4] + 'px';
+          span.style.top = (transform[5] - fontHeight) + 'px'; // Adjust for baseline
+          span.style.fontSize = fontHeight + 'px';
           span.style.fontFamily = item.fontName || 'sans-serif';
+
+          if (angle !== 0) {
+            span.style.transform = `rotate(${angle}rad)`;
+          }
 
           textLayerDiv.appendChild(span);
         }
