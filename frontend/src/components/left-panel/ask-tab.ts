@@ -131,6 +131,15 @@ export class AskTab extends LitElement {
 
       this.conversation = [...this.conversation, userMessage, assistantMessage];
 
+      // Notify parent of conversation update
+      this.dispatchEvent(
+        new CustomEvent('conversation-updated', {
+          detail: { conversation: this.conversation },
+          bubbles: true,
+          composed: true
+        })
+      );
+
       // Scroll to bottom after update
       await this.updateComplete;
       this.scrollToBottom();
@@ -160,6 +169,15 @@ export class AskTab extends LitElement {
         await api.toggleFlag(this.sessionId, exchangeId);
         this.flags = [...this.flags, exchangeId];
       }
+
+      // Notify parent of flags update
+      this.dispatchEvent(
+        new CustomEvent('flags-updated', {
+          detail: { flags: this.flags },
+          bubbles: true,
+          composed: true
+        })
+      );
 
       this.requestUpdate();
     } catch (err) {
