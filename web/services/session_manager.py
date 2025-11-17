@@ -23,6 +23,7 @@ from ..api.models import (
     ConversationMessage,
     SessionMetadata,
 )
+from .zotero_service import get_zotero_service
 
 
 class SessionManager:
@@ -169,14 +170,96 @@ class SessionManager:
 
         Raises:
             ValueError: If Zotero item not found or no PDF attached
-            NotImplementedError: Zotero integration not yet implemented
-
-        Note:
-            This will be implemented in Task 7 (Zotero Integration Service)
         """
-        raise NotImplementedError(
-            "Zotero integration not yet available. "
-            "Will be implemented in Task 7: Zotero Integration Service"
+        # Get Zotero service
+        zotero = get_zotero_service()
+
+        if not zotero.is_configured():
+            raise ValueError("Zotero is not configured. Please provide API key and library ID in settings.")
+
+        # Get Zotero item
+        item = await zotero.get_paper_by_key(zotero_key)
+        if not item:
+            raise ValueError(f"Zotero item not found: {zotero_key}")
+
+        # Get PDF path
+        pdf_path = await zotero.get_pdf_path(zotero_key)
+        if not pdf_path:
+            raise ValueError(f"No PDF attachment found for Zotero item: {zotero_key}")
+
+        # Generate session ID
+        session_id = self._generate_session_id()
+
+        # Extract PDF content
+        full_text = await self.pdf_processor.extract_text(pdf_path)
+        metadata = await self.pdf_processor.extract_metadata(pdf_path)
+        page_count = metadata.get('page_count', 0)
+
+        # Get initial analysis from Claude (Haiku)
+        initial_analysis, usage_stats = await self.claude.initial_analysis(
+            pdf_path=pdf_path,
+            pdf_text=full_text
+        )
+
+        # Store session in database
+        now = datetime.utcnow()
+        async with self.db.transaction() as db:
+            # Insert session
+            await db.execute(
+                """
+                INSERT INTO sessions (id, filename, zotero_key, pdf_path, full_text, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (session_id, item.data.title or "Untitled", zotero_key, pdf_path, full_text, now, now)
+            )
+
+            # Store initial analysis
+            await db.execute(
+                """
+                INSERT INTO conversations (session_id, exchange_id, role, content, model, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (session_id, 0, "assistant", initial_analysis, usage_stats['model'], now)
+            )
+
+            # Store Zotero metadata if available
+            if item.data.title or item.data.DOI:
+                # Format authors as JSON string
+                authors_json = None
+                if item.data.creators:
+                    authors_list = [
+                        f"{c.lastName}, {c.firstName}" if c.lastName and c.firstName
+                        else c.name or c.lastName or c.firstName or "Unknown"
+                        for c in item.data.creators
+                    ]
+                    import json
+                    authors_json = json.dumps(authors_list)
+
+                await db.execute(
+                    """
+                    INSERT INTO metadata (session_id, title, authors, doi, publication_date, journal, abstract)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        session_id,
+                        item.data.title,
+                        authors_json,
+                        item.data.DOI,
+                        item.data.date,
+                        item.data.publicationTitle,
+                        item.data.abstractNote
+                    )
+                )
+
+        # Return session response
+        return SessionResponse(
+            session_id=session_id,
+            filename=item.data.title or "Untitled",
+            initial_analysis=initial_analysis,
+            created_at=now,
+            updated_at=now,
+            zotero_key=zotero_key,
+            page_count=page_count
         )
 
     async def get_session(self, session_id: str) -> Optional[SessionDetail]:

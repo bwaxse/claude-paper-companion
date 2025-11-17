@@ -21,6 +21,15 @@ from .query import (
     HighlightList,
 )
 
+from .zotero import (
+    ZoteroItem,
+    ZoteroItemSummary,
+    ZoteroSearchRequest,
+    ZoteroSearchResponse,
+    ZoteroNoteRequest,
+    ZoteroNoteResponse,
+)
+
 __all__ = [
     # Session models
     "SessionCreate",
@@ -37,4 +46,11 @@ __all__ = [
     "FlagResponse",
     "Highlight",
     "HighlightList",
+    # Zotero models
+    "ZoteroItem",
+    "ZoteroItemSummary",
+    "ZoteroSearchRequest",
+    "ZoteroSearchResponse",
+    "ZoteroNoteRequest",
+    "ZoteroNoteResponse",
 ]

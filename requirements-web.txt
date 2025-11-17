@@ -20,3 +20,6 @@ python-dotenv
 
 # Database
 aiosqlite
+
+# Zotero Integration
+pyzotero
