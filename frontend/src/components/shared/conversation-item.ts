@@ -4,7 +4,8 @@ import type { ConversationMessage } from '../../types/session';
 
 @customElement('conversation-item')
 export class ConversationItem extends LitElement {
-  @property({ type: Object }) message!: ConversationMessage;
+  @property({ type: Object }) userMessage!: ConversationMessage;
+  @property({ type: Object }) assistantMessage!: ConversationMessage;
   @property({ type: Boolean }) flagged = false;
 
   @state() private expanded = false;
@@ -15,29 +16,27 @@ export class ConversationItem extends LitElement {
       margin-bottom: 16px;
     }
 
-    .message {
+    .exchange {
       background: white;
       border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .question-section {
+      background: #f5f0e6;
       padding: 12px;
-    }
-
-    .user-message {
-      border-left: 3px solid #1a73e8;
-    }
-
-    .assistant-message {
-      border-left: 3px solid #7c4dff;
+      border-bottom: 1px solid #e8e0d0;
     }
 
     .highlighted-text {
-      background: #fff3cd;
+      background: rgba(255, 235, 59, 0.4);
       padding: 8px;
       border-radius: 4px;
       margin-bottom: 8px;
       font-size: 13px;
-      color: #856404;
-      border-left: 3px solid #f4b400;
+      color: #5d4e00;
+      border-left: 3px solid #ffc107;
     }
 
     .highlighted-text::before {
@@ -49,7 +48,7 @@ export class ConversationItem extends LitElement {
     }
 
     .user-query {
-      color: #1a73e8;
+      color: #4a4a4a;
       font-weight: 500;
       font-size: 14px;
       line-height: 1.5;
@@ -86,6 +85,16 @@ export class ConversationItem extends LitElement {
 
     .expand-indicator:hover {
       color: #1a73e8;
+    }
+
+    .page-indicator {
+      color: #666;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .response-section {
+      padding: 12px;
     }
 
     .assistant-response {
@@ -126,11 +135,6 @@ export class ConversationItem extends LitElement {
       color: #999;
     }
 
-    .page-indicator {
-      color: #666;
-      font-size: 12px;
-    }
-
     .actions {
       display: flex;
       gap: 8px;
@@ -165,7 +169,7 @@ export class ConversationItem extends LitElement {
   private handleFlag() {
     this.dispatchEvent(
       new CustomEvent('flag-toggle', {
-        detail: { exchangeId: this.message.id },
+        detail: { exchangeId: this.assistantMessage.id },
         bubbles: true,
         composed: true
       })
@@ -173,13 +177,11 @@ export class ConversationItem extends LitElement {
   }
 
   private async handleCopy() {
-    if (this.message.role === 'assistant') {
-      try {
-        await navigator.clipboard.writeText(this.message.content);
-        // Could show a toast notification here
-      } catch (err) {
-        console.error('Failed to copy:', err);
-      }
+    try {
+      await navigator.clipboard.writeText(this.assistantMessage.content);
+      // Could show a toast notification here
+    } catch (err) {
+      console.error('Failed to copy:', err);
     }
   }
 
@@ -205,7 +207,7 @@ export class ConversationItem extends LitElement {
   }
 
   private renderUserQuery() {
-    const content = this.message.content;
+    const content = this.userMessage.content;
     const lines = content.split('\n');
     const hasMultipleLines = lines.length > 1 || content.length > 100;
 
@@ -242,65 +244,58 @@ export class ConversationItem extends LitElement {
   }
 
   render() {
-    const isUser = this.message.role === 'user';
-
     return html`
-      <div class="message ${isUser ? 'user-message' : 'assistant-message'}">
-        ${this.message.highlighted_text
-          ? html`
-              <div class="highlighted-text">
-                ${this.message.highlighted_text}
-              </div>
-            `
-          : ''}
+      <div class="exchange">
+        <div class="question-section">
+          ${this.userMessage.highlighted_text
+            ? html`
+                <div class="highlighted-text">
+                  ${this.userMessage.highlighted_text}
+                </div>
+              `
+            : ''}
+          ${this.renderUserQuery()}
+          ${this.userMessage.page
+            ? html`
+                <div class="page-indicator">Page ${this.userMessage.page}</div>
+              `
+            : ''}
+        </div>
 
-        ${isUser
-          ? html`
-              ${this.renderUserQuery()}
-              ${this.message.page
+        <div class="response-section">
+          <div class="assistant-response">${this.assistantMessage.content}</div>
+
+          <div class="message-footer">
+            <div class="meta">
+              ${this.assistantMessage.model
                 ? html`
-                    <div class="page-indicator">Page ${this.message.page}</div>
+                    <span class="model-badge">
+                      ${this.getModelName(this.assistantMessage.model)}
+                    </span>
                   `
                 : ''}
-            `
-          : html`
-              <div class="assistant-response">${this.message.content}</div>
-            `}
-
-        ${!isUser
-          ? html`
-              <div class="message-footer">
-                <div class="meta">
-                  ${this.message.model
-                    ? html`
-                        <span class="model-badge">
-                          ${this.getModelName(this.message.model)}
-                        </span>
-                      `
-                    : ''}
-                  <span class="timestamp">
-                    ${this.formatTimestamp(this.message.timestamp)}
-                  </span>
-                </div>
-                <div class="actions">
-                  <button
-                    class="flag-btn ${this.flagged ? 'flagged' : ''}"
-                    @click=${this.handleFlag}
-                    title="${this.flagged ? 'Unflag' : 'Flag important'}"
-                  >
-                    ${this.flagged ? '★' : '☆'}
-                  </button>
-                  <button
-                    class="copy-btn"
-                    @click=${this.handleCopy}
-                    title="Copy response"
-                  >
-                    📋
-                  </button>
-                </div>
-              </div>
-            `
-          : ''}
+              <span class="timestamp">
+                ${this.formatTimestamp(this.assistantMessage.timestamp)}
+              </span>
+            </div>
+            <div class="actions">
+              <button
+                class="flag-btn ${this.flagged ? 'flagged' : ''}"
+                @click=${this.handleFlag}
+                title="${this.flagged ? 'Unflag' : 'Flag important'}"
+              >
+                ${this.flagged ? '★' : '☆'}
+              </button>
+              <button
+                class="copy-btn"
+                @click=${this.handleCopy}
+                title="Copy response"
+              >
+                📋
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }

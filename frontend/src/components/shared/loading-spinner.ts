@@ -5,6 +5,7 @@ import { customElement, property } from 'lit/decorators.js';
 export class LoadingSpinner extends LitElement {
   @property({ type: String }) message = 'Loading...';
   @property({ type: String }) size = 'medium'; // 'small' | 'medium' | 'large'
+  @property({ type: Boolean }) light = false; // Use light text for dark backgrounds
 
   static styles = css`
     :host {
@@ -44,6 +45,10 @@ export class LoadingSpinner extends LitElement {
       font-size: 14px;
     }
 
+    .message.light {
+      color: white;
+    }
+
     @keyframes spin {
       to {
         transform: rotate(360deg);
@@ -54,7 +59,7 @@ export class LoadingSpinner extends LitElement {
   render() {
     return html`
       <div class="spinner ${this.size}"></div>
-      ${this.message ? html`<div class="message">${this.message}</div>` : ''}
+      ${this.message ? html`<div class="message ${this.light ? 'light' : ''}">${this.message}</div>` : ''}
     `;
   }
 }

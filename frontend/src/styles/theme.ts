@@ -7,9 +7,9 @@ export const theme = {
     border: '#e0e0e0',
     text: '#333333',
     textSecondary: '#666666',
-    highlight: '#fff3cd',
-    highlightText: '#856404',
-    flag: '#f4b400',
+    highlight: 'rgba(255, 235, 59, 0.4)',
+    highlightText: '#5d4e00',
+    flag: '#ffc107',
     pdfBackground: '#525659',
     error: '#d32f2f',
     success: '#388e3c'

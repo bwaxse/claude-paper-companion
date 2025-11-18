@@ -21,13 +21,13 @@ export class QueryInput extends LitElement {
     }
 
     .selected-text-preview {
-      background: #fff3cd;
-      border: 1px solid #f4b400;
+      background: rgba(255, 235, 59, 0.4);
+      border: 1px solid #ffc107;
       border-radius: 4px;
       padding: 8px 12px;
       margin-bottom: 12px;
       font-size: 13px;
-      color: #856404;
+      color: #5d4e00;
       display: flex;
       justify-content: space-between;
       align-items: start;
@@ -53,7 +53,7 @@ export class QueryInput extends LitElement {
     .clear-selection {
       background: none;
       border: none;
-      color: #856404;
+      color: #5d4e00;
       cursor: pointer;
       font-size: 18px;
       padding: 0;

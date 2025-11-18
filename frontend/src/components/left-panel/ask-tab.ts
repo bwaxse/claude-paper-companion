@@ -79,6 +79,11 @@ export class AskTab extends LitElement {
       white-space: pre-wrap;
     }
 
+    .initial-analysis-content .section-header {
+      font-weight: 700;
+      color: #333;
+    }
+
     .error-container {
       padding: 16px;
     }
@@ -208,11 +213,22 @@ export class AskTab extends LitElement {
       `;
     }
 
-    return conversationMessages.map(
-      (message) => html`
+    // Group messages into pairs (user question + assistant response)
+    const exchanges: Array<{ user: ConversationMessage; assistant: ConversationMessage }> = [];
+    for (let i = 0; i < conversationMessages.length; i += 2) {
+      const userMsg = conversationMessages[i];
+      const assistantMsg = conversationMessages[i + 1];
+      if (userMsg && assistantMsg && userMsg.role === 'user' && assistantMsg.role === 'assistant') {
+        exchanges.push({ user: userMsg, assistant: assistantMsg });
+      }
+    }
+
+    return exchanges.map(
+      (exchange) => html`
         <conversation-item
-          .message=${message}
-          .flagged=${this.flags.includes(message.id)}
+          .userMessage=${exchange.user}
+          .assistantMessage=${exchange.assistant}
+          .flagged=${this.flags.includes(exchange.assistant.id)}
           @flag-toggle=${this.handleFlagToggle}
         ></conversation-item>
       `
@@ -237,19 +253,54 @@ export class AskTab extends LitElement {
       content = content.substring(headerMatch[0].length).trim();
     }
 
+    // Parse content to make section headers bold
+    const formattedContent = this.formatAnalysisContent(content);
+
     return html`
       <div class="initial-analysis">
         <div class="initial-analysis-title">${title}</div>
-        <div class="initial-analysis-content">${content}</div>
+        <div class="initial-analysis-content">${formattedContent}</div>
       </div>
     `;
+  }
+
+  private formatAnalysisContent(content: string) {
+    // Split content by lines and process each line
+    const lines = content.split('\n');
+    const result: any[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Check for section headers like "**Core Innovation**:" or "Core Innovation:" or "• **Core Innovation**:"
+      const boldMatch = line.match(/^(•?\s*)\*\*([^*]+)\*\*(:.*)?$/);
+      const plainHeaderMatch = line.match(/^(•?\s*)([A-Z][A-Za-z\s]+)(:)(.*)$/);
+
+      if (boldMatch) {
+        // Handle **Bold Header**: format
+        const [, prefix, headerText, rest] = boldMatch;
+        result.push(html`${prefix}<span class="section-header">${headerText}</span>${rest || ''}`);
+      } else if (plainHeaderMatch && plainHeaderMatch[2].length < 30) {
+        // Handle plain "Header:" format (only if reasonably short)
+        const [, prefix, headerText, colon, rest] = plainHeaderMatch;
+        result.push(html`${prefix}<span class="section-header">${headerText}</span>${colon}${rest}`);
+      } else {
+        result.push(line);
+      }
+
+      // Add newline between lines (except after last line)
+      if (i < lines.length - 1) {
+        result.push('\n');
+      }
+    }
+
+    return result;
   }
 
   render() {
     if (!this.sessionId) {
       return html`
         <div class="empty-state">
-          <div class="empty-state-icon">📄</div>
           <h3>No paper loaded</h3>
           <p>Upload a PDF to start asking questions.</p>
         </div>
