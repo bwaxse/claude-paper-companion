@@ -29,6 +29,13 @@ export class ConversationItem extends LitElement {
       border-bottom: 1px solid #e8e0d0;
     }
 
+    .question-label {
+      font-weight: 700;
+      color: #333;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
     .highlighted-text {
       background: rgba(255, 235, 59, 0.4);
       padding: 8px;
@@ -260,6 +267,7 @@ export class ConversationItem extends LitElement {
                 </div>
               `
             : ''}
+          <div class="question-label">Question:</div>
           ${this.renderUserQuery()}
           ${this.userMessage.page
             ? html`
