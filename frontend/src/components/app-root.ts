@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../services/api';
+import { sessionStorage } from '../services/session-storage';
 import type { ConversationMessage, Session } from '../types/session';
 import type { TextSelection, OutlineItem, Concept } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
@@ -9,6 +10,7 @@ import './session-picker/session-list';
 import './shared/loading-spinner';
 import './shared/error-message';
 import type { PdfViewer } from './pdf-viewer/pdf-viewer';
+import type { LeftPanel } from './left-panel/left-panel';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -26,6 +28,129 @@ export class AppRoot extends LitElement {
   @state() private showSessionPicker = false;
 
   @query('pdf-viewer') private pdfViewer?: PdfViewer;
+  @query('left-panel') private leftPanel?: LeftPanel;
+
+  private boundKeydownHandler = this.handleKeydown.bind(this);
+
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('keydown', this.boundKeydownHandler);
+
+    // Load saved zoom preference
+    const savedZoom = sessionStorage.getPdfZoom();
+    if (this.pdfViewer && savedZoom) {
+      this.pdfViewer.scale = savedZoom;
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    document.removeEventListener('keydown', this.boundKeydownHandler);
+  }
+
+  private handleKeydown(e: KeyboardEvent) {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifier = isMac ? e.metaKey : e.ctrlKey;
+
+    // Don't trigger shortcuts when typing in input fields
+    const target = e.target as HTMLElement;
+    const isTyping = target.tagName === 'INPUT' ||
+                     target.tagName === 'TEXTAREA' ||
+                     target.isContentEditable;
+
+    // Cmd/Ctrl + K - Focus query input
+    if (modifier && e.key === 'k') {
+      e.preventDefault();
+      this.focusQueryInput();
+      return;
+    }
+
+    // Cmd/Ctrl + Shift + F - Flag last exchange
+    if (modifier && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      this.flagLastExchange();
+      return;
+    }
+
+    // Escape - Clear text selection
+    if (e.key === 'Escape') {
+      if (this.showSessionPicker) {
+        this.showSessionPicker = false;
+      } else if (this.selectedText) {
+        this.handleClearSelection();
+      }
+      return;
+    }
+
+    // Tab switching with number keys (only when not typing)
+    if (!isTyping && !modifier && !e.shiftKey && !e.altKey) {
+      if (e.key === '1') {
+        e.preventDefault();
+        this.switchTab('outline');
+        return;
+      }
+      if (e.key === '2') {
+        e.preventDefault();
+        this.switchTab('concepts');
+        return;
+      }
+      if (e.key === '3') {
+        e.preventDefault();
+        this.switchTab('ask');
+        return;
+      }
+    }
+  }
+
+  private focusQueryInput() {
+    // Find the query input in the shadow DOM
+    const leftPanel = this.shadowRoot?.querySelector('left-panel');
+    if (leftPanel) {
+      const askTab = leftPanel.shadowRoot?.querySelector('ask-tab');
+      if (askTab) {
+        const queryInput = askTab.shadowRoot?.querySelector('query-input');
+        if (queryInput) {
+          const textarea = queryInput.shadowRoot?.querySelector('textarea');
+          if (textarea) {
+            textarea.focus();
+          }
+        }
+      }
+    }
+  }
+
+  private async flagLastExchange() {
+    if (!this.sessionId || this.conversation.length < 2) return;
+
+    // Find the last assistant message
+    const lastAssistantMsg = [...this.conversation]
+      .reverse()
+      .find(msg => msg.role === 'assistant');
+
+    if (lastAssistantMsg && lastAssistantMsg.id > 1) {
+      const isFlagged = this.flags.includes(lastAssistantMsg.id);
+
+      try {
+        if (isFlagged) {
+          await api.unflag(this.sessionId, lastAssistantMsg.id);
+          this.flags = this.flags.filter(id => id !== lastAssistantMsg.id);
+        } else {
+          await api.toggleFlag(this.sessionId, lastAssistantMsg.id);
+          this.flags = [...this.flags, lastAssistantMsg.id];
+        }
+      } catch (err) {
+        console.error('Failed to toggle flag:', err);
+      }
+    }
+  }
+
+  private switchTab(tab: 'outline' | 'concepts' | 'ask') {
+    if (this.leftPanel) {
+      // Access the activeTab property directly
+      (this.leftPanel as any).activeTab = tab;
+      sessionStorage.setActiveTab(tab);
+    }
+  }
 
   static styles = css`
     :host {
@@ -165,6 +290,9 @@ export class AppRoot extends LitElement {
       this.filename = session.filename;
       this.pdfUrl = URL.createObjectURL(file);
 
+      // Save to session storage for "pick up where left off"
+      sessionStorage.setLastSessionId(session.session_id);
+
       // Initialize conversation with initial analysis
       this.conversation = [
         {
@@ -244,6 +372,9 @@ export class AppRoot extends LitElement {
       this.filename = fullSession.filename;
       this.conversation = fullSession.conversation || [];
       this.flags = fullSession.flags || [];
+
+      // Save to session storage
+      sessionStorage.setLastSessionId(fullSession.session_id);
 
       // For now, we need the user to re-upload the PDF file
       // In a full implementation, we'd fetch it from the backend
