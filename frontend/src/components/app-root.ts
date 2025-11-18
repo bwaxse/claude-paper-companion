@@ -1,12 +1,14 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../services/api';
-import type { ConversationMessage } from '../types/session';
-import type { TextSelection } from '../types/pdf';
+import type { ConversationMessage, Session } from '../types/session';
+import type { TextSelection, OutlineItem, Concept } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
-import './left-panel/ask-tab';
+import './left-panel/left-panel';
+import './session-picker/session-list';
 import './shared/loading-spinner';
 import './shared/error-message';
+import type { PdfViewer } from './pdf-viewer/pdf-viewer';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -15,10 +17,15 @@ export class AppRoot extends LitElement {
   @state() private pdfUrl = '';
   @state() private conversation: ConversationMessage[] = [];
   @state() private flags: number[] = [];
+  @state() private outline: OutlineItem[] = [];
+  @state() private concepts: Concept[] = [];
   @state() private selectedText = '';
   @state() private selectedPage?: number;
   @state() private loading = false;
   @state() private error = '';
+  @state() private showSessionPicker = false;
+
+  @query('pdf-viewer') private pdfViewer?: PdfViewer;
 
   static styles = css`
     :host {
@@ -37,26 +44,8 @@ export class AppRoot extends LitElement {
       background: #f8f9fa;
     }
 
-    .panel-header {
-      padding: 16px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
-      flex-shrink: 0;
-    }
-
-    .panel-header h1 {
-      margin: 0 0 4px 0;
-      font-size: 18px;
-      color: #333;
-    }
-
-    .panel-header .filename {
-      margin: 0;
-      font-size: 13px;
-      color: #666;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    left-panel {
+      height: 100%;
     }
 
     .center-pane {
@@ -105,6 +94,29 @@ export class AppRoot extends LitElement {
       background: #1557b0;
     }
 
+    .secondary-btn {
+      padding: 14px 28px;
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .secondary-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .empty-state-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
     input[type='file'] {
       display: none;
     }
@@ -130,11 +142,6 @@ export class AppRoot extends LitElement {
     .error-screen error-message {
       max-width: 500px;
       margin-bottom: 20px;
-    }
-
-    ask-tab {
-      flex: 1;
-      min-height: 0;
     }
   `;
 
@@ -200,17 +207,89 @@ export class AppRoot extends LitElement {
     this.selectedPage = undefined;
   }
 
+  handleNavigateToPage(e: CustomEvent<{ page: number }>) {
+    if (this.pdfViewer) {
+      this.pdfViewer.scrollToPage(e.detail.page);
+    }
+  }
+
+  handleHighlightConcept(e: CustomEvent<{ concept: Concept }>) {
+    // TODO: Implement concept highlighting in PDF viewer
+    // For now, navigate to the first page where the concept appears
+    const concept = e.detail.concept;
+    if (concept.pages.length > 0 && this.pdfViewer) {
+      this.pdfViewer.scrollToPage(concept.pages[0]);
+    }
+  }
+
+  handleShowSessionPicker() {
+    this.showSessionPicker = true;
+  }
+
+  handleCloseSessionPicker() {
+    this.showSessionPicker = false;
+  }
+
+  async handleSessionSelected(e: CustomEvent<{ session: Session }>) {
+    const { session } = e.detail;
+    this.showSessionPicker = false;
+    this.loading = true;
+    this.error = '';
+
+    try {
+      // Load full session data
+      const fullSession = await api.getSession(session.session_id);
+
+      this.sessionId = fullSession.session_id;
+      this.filename = fullSession.filename;
+      this.conversation = fullSession.conversation || [];
+      this.flags = fullSession.flags || [];
+
+      // For now, we need the user to re-upload the PDF file
+      // In a full implementation, we'd fetch it from the backend
+      // Show a message that the PDF needs to be re-uploaded
+      this.pdfUrl = '';
+      this.loading = false;
+
+      // Display a notification or prompt to re-upload
+      alert('Session loaded! Please re-upload the PDF file to view it. Your conversation history has been restored.');
+
+    } catch (err) {
+      console.error('Failed to load session:', err);
+      if (err instanceof ApiError) {
+        this.error = err.message;
+      } else {
+        this.error = 'Failed to load session';
+      }
+      this.loading = false;
+    }
+  }
+
+  handleUploadNewFromPicker() {
+    this.showSessionPicker = false;
+    // Trigger file input click
+    const fileInput = this.shadowRoot?.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  }
+
   private renderEmptyState() {
     return html`
       <div class="empty-state">
         <h2>Paper Companion</h2>
         <p>
-          Upload a PDF to get started.
+          Upload a PDF to get started, or load a previous session.
         </p>
-        <label class="upload-btn">
-          Upload PDF
-          <input type="file" accept=".pdf" @change=${this.handleFileUpload} />
-        </label>
+        <div class="empty-state-actions">
+          <label class="upload-btn">
+            Upload PDF
+            <input type="file" accept=".pdf" @change=${this.handleFileUpload} />
+          </label>
+          <button class="secondary-btn" @click=${this.handleShowSessionPicker}>
+            Load Previous Session
+          </button>
+        </div>
       </div>
     `;
   }
@@ -242,24 +321,22 @@ export class AppRoot extends LitElement {
   render() {
     return html`
       <div class="left-panel">
-        <div class="panel-header">
-          <h1>Paper Companion</h1>
-          ${this.filename
-            ? html`<p class="filename" title="${this.filename}">${this.filename}</p>`
-            : ''}
-        </div>
-
-        <ask-tab
+        <left-panel
           .sessionId=${this.sessionId}
+          .filename=${this.filename}
           .conversation=${this.conversation}
           .flags=${this.flags}
+          .outline=${this.outline}
+          .concepts=${this.concepts}
           .selectedText=${this.selectedText}
           .selectedPage=${this.selectedPage}
           @conversation-updated=${(e: CustomEvent) =>
             (this.conversation = e.detail.conversation)}
           @flags-updated=${(e: CustomEvent) => (this.flags = e.detail.flags)}
           @clear-selection=${this.handleClearSelection}
-        ></ask-tab>
+          @navigate-to-page=${this.handleNavigateToPage}
+          @highlight-concept=${this.handleHighlightConcept}
+        ></left-panel>
       </div>
 
       <div class="center-pane">
@@ -276,6 +353,13 @@ export class AppRoot extends LitElement {
             `
           : this.renderEmptyState()}
       </div>
+
+      <session-list
+        .visible=${this.showSessionPicker}
+        @session-selected=${this.handleSessionSelected}
+        @close=${this.handleCloseSessionPicker}
+        @upload-new=${this.handleUploadNewFromPicker}
+      ></session-list>
     `;
   }
 }
