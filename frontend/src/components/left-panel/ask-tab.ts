@@ -40,16 +40,9 @@ export class AskTab extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100%;
       padding: 24px;
       text-align: center;
       color: #666;
-    }
-
-    .empty-state-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
     }
 
     .empty-state h3 {
@@ -65,22 +58,22 @@ export class AskTab extends LitElement {
     }
 
     .initial-analysis {
-      background: #e8f5e9;
-      border: 1px solid #81c784;
+      background: white;
+      border: 1px solid #9e9e9e;
       border-radius: 8px;
       padding: 16px;
       margin-bottom: 16px;
     }
 
     .initial-analysis-title {
-      font-weight: 600;
-      color: #2e7d32;
-      margin-bottom: 8px;
-      font-size: 14px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 12px;
+      font-size: 15px;
     }
 
     .initial-analysis-content {
-      color: #1b5e20;
+      color: #444;
       font-size: 13px;
       line-height: 1.6;
       white-space: pre-wrap;
@@ -207,10 +200,9 @@ export class AskTab extends LitElement {
     if (conversationMessages.length === 0) {
       return html`
         <div class="empty-state">
-          <div class="empty-state-icon">💬</div>
           <h3>No questions yet</h3>
           <p>
-            Select text in the PDF and ask questions, or just type your query below.
+            Type a question below, or select text in the PDF to ask about specific passages.
           </p>
         </div>
       `;
@@ -234,10 +226,21 @@ export class AskTab extends LitElement {
 
     if (!initialAnalysis) return '';
 
+    // Parse the content to extract title and body
+    let title = 'Critical Review: 5-Bullet Summary';
+    let content = initialAnalysis.content;
+
+    // Check if content starts with a markdown header
+    const headerMatch = content.match(/^#\s*(.+?)[\r\n]/);
+    if (headerMatch) {
+      title = headerMatch[1].trim();
+      content = content.substring(headerMatch[0].length).trim();
+    }
+
     return html`
       <div class="initial-analysis">
-        <div class="initial-analysis-title">Initial Analysis</div>
-        <div class="initial-analysis-content">${initialAnalysis.content}</div>
+        <div class="initial-analysis-title">${title}</div>
+        <div class="initial-analysis-content">${content}</div>
       </div>
     `;
   }

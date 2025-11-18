@@ -1,11 +1,13 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import type { ConversationMessage } from '../../types/session';
 
 @customElement('conversation-item')
 export class ConversationItem extends LitElement {
   @property({ type: Object }) message!: ConversationMessage;
   @property({ type: Boolean }) flagged = false;
+
+  @state() private expanded = false;
 
   static styles = css`
     :host {
@@ -25,7 +27,7 @@ export class ConversationItem extends LitElement {
     }
 
     .assistant-message {
-      border-left: 3px solid #34a853;
+      border-left: 3px solid #7c4dff;
     }
 
     .highlighted-text {
@@ -51,6 +53,39 @@ export class ConversationItem extends LitElement {
       font-weight: 500;
       font-size: 14px;
       line-height: 1.5;
+    }
+
+    .user-query-preview {
+      cursor: pointer;
+    }
+
+    .user-query-first-line {
+      display: block;
+    }
+
+    .user-query-rest {
+      display: block;
+      color: #6b7280;
+      opacity: 0.6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 400;
+    }
+
+    .user-query-full {
+      white-space: pre-wrap;
+    }
+
+    .expand-indicator {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+      cursor: pointer;
+    }
+
+    .expand-indicator:hover {
+      color: #1a73e8;
     }
 
     .assistant-response {
@@ -79,8 +114,8 @@ export class ConversationItem extends LitElement {
     }
 
     .model-badge {
-      background: #e8f0fe;
-      color: #1a73e8;
+      background: #ede9fe;
+      color: #7c4dff;
       padding: 2px 8px;
       border-radius: 12px;
       font-size: 11px;
@@ -165,6 +200,47 @@ export class ConversationItem extends LitElement {
     return 'Claude';
   }
 
+  private toggleExpand() {
+    this.expanded = !this.expanded;
+  }
+
+  private renderUserQuery() {
+    const content = this.message.content;
+    const lines = content.split('\n');
+    const hasMultipleLines = lines.length > 1 || content.length > 100;
+
+    if (!hasMultipleLines || this.expanded) {
+      return html`
+        <div class="user-query user-query-full" @click=${this.toggleExpand}>
+          ${content}
+        </div>
+        ${hasMultipleLines
+          ? html`
+              <div class="expand-indicator" @click=${this.toggleExpand}>
+                Click to collapse
+              </div>
+            `
+          : ''}
+      `;
+    }
+
+    // Show preview with first line and faded second line
+    const firstLine = lines[0];
+    const rest = lines.length > 1 ? lines[1] : content.substring(firstLine.length);
+
+    return html`
+      <div class="user-query user-query-preview" @click=${this.toggleExpand}>
+        <span class="user-query-first-line">${firstLine}</span>
+        ${rest
+          ? html`<span class="user-query-rest">${rest}</span>`
+          : ''}
+      </div>
+      <div class="expand-indicator" @click=${this.toggleExpand}>
+        Click to expand
+      </div>
+    `;
+  }
+
   render() {
     const isUser = this.message.role === 'user';
 
@@ -180,7 +256,7 @@ export class ConversationItem extends LitElement {
 
         ${isUser
           ? html`
-              <div class="user-query">${this.message.content}</div>
+              ${this.renderUserQuery()}
               ${this.message.page
                 ? html`
                     <div class="page-indicator">Page ${this.message.page}</div>

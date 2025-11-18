@@ -185,8 +185,8 @@ export class QueryInput extends LitElement {
   }
 
   private handleKeyDown(e: KeyboardEvent) {
-    // Submit on Cmd+Enter or Ctrl+Enter
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    // Submit on Enter (without Shift for new line)
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       this.handleSubmit();
     }
@@ -238,7 +238,7 @@ export class QueryInput extends LitElement {
 
       <div class="footer">
         <div class="hint">
-          ${this.loading ? 'Thinking...' : 'Cmd+Enter to send'}
+          ${this.loading ? 'Thinking...' : 'Enter to send · Shift+Enter for new line'}
           ${charCount > 0
             ? html`
                 <span class="char-count ${showWarning ? 'warning' : ''}">
