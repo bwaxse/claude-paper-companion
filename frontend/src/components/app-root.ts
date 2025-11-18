@@ -205,8 +205,7 @@ export class AppRoot extends LitElement {
       <div class="empty-state">
         <h2>Paper Companion</h2>
         <p>
-          Upload a PDF to get started. Ask questions about your paper with AI-powered
-          analysis.
+          Upload a PDF to get started.
         </p>
         <label class="upload-btn">
           Upload PDF
@@ -222,6 +221,7 @@ export class AppRoot extends LitElement {
         <loading-spinner
           size="large"
           message="Analyzing paper..."
+          light
         ></loading-spinner>
       </div>
     `;

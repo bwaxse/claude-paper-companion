@@ -74,8 +74,6 @@ export class PdfViewer extends LitElement {
       flex: 1;
       overflow-y: auto;
       overflow-x: auto;
-      display: flex;
-      justify-content: center;
       padding: 20px;
     }
 
@@ -84,6 +82,9 @@ export class PdfViewer extends LitElement {
       flex-direction: column;
       gap: 20px;
       align-items: center;
+      margin: 0 auto;
+      width: fit-content;
+      min-width: 100%;
     }
 
     .page {
