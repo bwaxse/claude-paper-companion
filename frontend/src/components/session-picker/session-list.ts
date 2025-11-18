@@ -227,6 +227,13 @@ export class SessionList extends LitElement {
     this.loadSessions();
   }
 
+  updated(changedProperties: Map<string, unknown>) {
+    // Reload sessions when the picker becomes visible
+    if (changedProperties.has('visible') && this.visible) {
+      this.loadSessions();
+    }
+  }
+
   async loadSessions() {
     this.loading = true;
     this.error = '';

@@ -68,8 +68,15 @@ export class AskTab extends LitElement {
     .initial-analysis-title {
       font-weight: 700;
       color: #333;
-      margin-bottom: 12px;
+      margin-bottom: 4px;
       font-size: 15px;
+    }
+
+    .initial-analysis-subtitle {
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 12px;
+      font-size: 13px;
     }
 
     .initial-analysis-content {
@@ -159,27 +166,34 @@ export class AskTab extends LitElement {
     const { exchangeId } = e.detail;
     const isFlagged = this.flags.includes(exchangeId);
 
+    // Update UI immediately (optimistic update)
+    if (isFlagged) {
+      this.flags = this.flags.filter((id) => id !== exchangeId);
+    } else {
+      this.flags = [...this.flags, exchangeId];
+    }
+
+    // Notify parent of flags update
+    this.dispatchEvent(
+      new CustomEvent('flags-updated', {
+        detail: { flags: this.flags },
+        bubbles: true,
+        composed: true
+      })
+    );
+
+    this.requestUpdate();
+
+    // Then sync with backend (don't block UI on this)
     try {
       if (isFlagged) {
         await api.unflag(this.sessionId, exchangeId);
-        this.flags = this.flags.filter((id) => id !== exchangeId);
       } else {
         await api.toggleFlag(this.sessionId, exchangeId);
-        this.flags = [...this.flags, exchangeId];
       }
-
-      // Notify parent of flags update
-      this.dispatchEvent(
-        new CustomEvent('flags-updated', {
-          detail: { flags: this.flags },
-          bubbles: true,
-          composed: true
-        })
-      );
-
-      this.requestUpdate();
     } catch (err) {
       console.error('Flag toggle error:', err);
+      // Note: We keep the optimistic UI update even if API fails
     }
   }
 
@@ -243,13 +257,20 @@ export class AskTab extends LitElement {
     if (!initialAnalysis) return '';
 
     // Parse the content to extract title and body
-    let title = 'Critical Review: 5-Bullet Summary';
+    let paperTitle = '';
     let content = initialAnalysis.content;
 
     // Check if content starts with a markdown header
     const headerMatch = content.match(/^#\s*(.+?)[\r\n]/);
     if (headerMatch) {
-      title = headerMatch[1].trim();
+      const fullTitle = headerMatch[1].trim();
+      // Extract paper title from formats like "Review Summary: Paper Title" or "Critical Review: Paper Title"
+      const titleMatch = fullTitle.match(/^(?:Review Summary|Critical Review|5-Bullet Summary):\s*(.+)$/i);
+      if (titleMatch) {
+        paperTitle = titleMatch[1].trim();
+      } else {
+        paperTitle = fullTitle;
+      }
       content = content.substring(headerMatch[0].length).trim();
     }
 
@@ -258,7 +279,8 @@ export class AskTab extends LitElement {
 
     return html`
       <div class="initial-analysis">
-        <div class="initial-analysis-title">${title}</div>
+        ${paperTitle ? html`<div class="initial-analysis-title">${paperTitle}</div>` : ''}
+        <div class="initial-analysis-subtitle">Review Summary</div>
         <div class="initial-analysis-content">${formattedContent}</div>
       </div>
     `;

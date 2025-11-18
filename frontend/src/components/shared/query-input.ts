@@ -182,6 +182,16 @@ export class QueryInput extends LitElement {
     if (this.textarea) {
       this.textarea.style.height = 'auto';
     }
+
+    // Clear selected text after submitting
+    if (this.selectedText) {
+      this.dispatchEvent(
+        new CustomEvent('clear-selection', {
+          bubbles: true,
+          composed: true
+        })
+      );
+    }
   }
 
   private handleKeyDown(e: KeyboardEvent) {

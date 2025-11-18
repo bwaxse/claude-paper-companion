@@ -33,7 +33,11 @@ export class ConversationItem extends LitElement {
       font-weight: 700;
       color: #333;
       font-size: 13px;
-      margin-bottom: 4px;
+      display: inline;
+    }
+
+    .question-row {
+      margin-bottom: 0;
     }
 
     .highlighted-text {
@@ -59,6 +63,11 @@ export class ConversationItem extends LitElement {
       font-weight: 500;
       font-size: 14px;
       line-height: 1.5;
+      display: inline;
+    }
+
+    .user-query-block {
+      display: block;
     }
 
     .user-query-preview {
@@ -222,9 +231,9 @@ export class ConversationItem extends LitElement {
 
     if (!hasMultipleLines || this.expanded) {
       return html`
-        <div class="user-query user-query-full" @click=${this.toggleExpand}>
+        <span class="user-query user-query-full" @click=${this.toggleExpand}>
           ${content}
-        </div>
+        </span>
         ${hasMultipleLines
           ? html`
               <div class="expand-indicator" @click=${this.toggleExpand}>
@@ -240,12 +249,12 @@ export class ConversationItem extends LitElement {
     const rest = lines.length > 1 ? lines[1] : content.substring(firstLine.length);
 
     return html`
-      <div class="user-query user-query-preview" @click=${this.toggleExpand}>
+      <span class="user-query user-query-preview" @click=${this.toggleExpand}>
         <span class="user-query-first-line">${firstLine}</span>
         ${rest
           ? html`<span class="user-query-rest">${rest}</span>`
           : ''}
-      </div>
+      </span>
       <div class="expand-indicator" @click=${this.toggleExpand}>
         Click to expand
       </div>
@@ -267,8 +276,9 @@ export class ConversationItem extends LitElement {
                 </div>
               `
             : ''}
-          <div class="question-label">Question:</div>
-          ${this.renderUserQuery()}
+          <div class="question-row">
+            <span class="question-label">Question: </span>${this.renderUserQuery()}
+          </div>
           ${this.userMessage.page
             ? html`
                 <div class="page-indicator">Page ${this.userMessage.page}</div>

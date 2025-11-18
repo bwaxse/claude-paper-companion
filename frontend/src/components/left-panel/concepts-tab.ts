@@ -197,8 +197,12 @@ export class ConceptsTab extends LitElement {
     if (changedProperties.has('concepts') && this.concepts.length > 0) {
       this.localConcepts = this.concepts;
     }
-    if (changedProperties.has('sessionId') && this.sessionId && this.localConcepts.length === 0) {
-      this.loadConcepts();
+    if (changedProperties.has('sessionId') && this.sessionId) {
+      // Clear error and reload when sessionId changes
+      this.error = '';
+      if (this.localConcepts.length === 0) {
+        this.loadConcepts();
+      }
     }
   }
 
