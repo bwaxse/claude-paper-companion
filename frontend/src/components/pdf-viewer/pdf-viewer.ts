@@ -370,6 +370,11 @@ export class PdfViewer extends LitElement {
     }
   }
 
+  // Public alias for external navigation
+  scrollToPage(page: number) {
+    this.goToPage(page);
+  }
+
   nextPage() {
     this.goToPage(this.currentPage + 1);
   }

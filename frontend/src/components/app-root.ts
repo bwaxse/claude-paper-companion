@@ -1,12 +1,16 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../services/api';
-import type { ConversationMessage } from '../types/session';
-import type { TextSelection } from '../types/pdf';
+import { sessionStorage } from '../services/session-storage';
+import type { ConversationMessage, Session } from '../types/session';
+import type { TextSelection, OutlineItem, Concept } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
-import './left-panel/ask-tab';
+import './left-panel/left-panel';
+import './session-picker/session-list';
 import './shared/loading-spinner';
 import './shared/error-message';
+import type { PdfViewer } from './pdf-viewer/pdf-viewer';
+import type { LeftPanel } from './left-panel/left-panel';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -15,10 +19,138 @@ export class AppRoot extends LitElement {
   @state() private pdfUrl = '';
   @state() private conversation: ConversationMessage[] = [];
   @state() private flags: number[] = [];
+  @state() private outline: OutlineItem[] = [];
+  @state() private concepts: Concept[] = [];
   @state() private selectedText = '';
   @state() private selectedPage?: number;
   @state() private loading = false;
   @state() private error = '';
+  @state() private showSessionPicker = false;
+
+  @query('pdf-viewer') private pdfViewer?: PdfViewer;
+  @query('left-panel') private leftPanel?: LeftPanel;
+
+  private boundKeydownHandler = this.handleKeydown.bind(this);
+
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('keydown', this.boundKeydownHandler);
+
+    // Load saved zoom preference
+    const savedZoom = sessionStorage.getPdfZoom();
+    if (this.pdfViewer && savedZoom) {
+      this.pdfViewer.scale = savedZoom;
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    document.removeEventListener('keydown', this.boundKeydownHandler);
+  }
+
+  private handleKeydown(e: KeyboardEvent) {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifier = isMac ? e.metaKey : e.ctrlKey;
+
+    // Don't trigger shortcuts when typing in input fields
+    const target = e.target as HTMLElement;
+    const isTyping = target.tagName === 'INPUT' ||
+                     target.tagName === 'TEXTAREA' ||
+                     target.isContentEditable;
+
+    // Cmd/Ctrl + K - Focus query input
+    if (modifier && e.key === 'k') {
+      e.preventDefault();
+      this.focusQueryInput();
+      return;
+    }
+
+    // Cmd/Ctrl + Shift + F - Flag last exchange
+    if (modifier && e.shiftKey && e.key === 'F') {
+      e.preventDefault();
+      this.flagLastExchange();
+      return;
+    }
+
+    // Escape - Clear text selection
+    if (e.key === 'Escape') {
+      if (this.showSessionPicker) {
+        this.showSessionPicker = false;
+      } else if (this.selectedText) {
+        this.handleClearSelection();
+      }
+      return;
+    }
+
+    // Tab switching with number keys (only when not typing)
+    if (!isTyping && !modifier && !e.shiftKey && !e.altKey) {
+      if (e.key === '1') {
+        e.preventDefault();
+        this.switchTab('outline');
+        return;
+      }
+      if (e.key === '2') {
+        e.preventDefault();
+        this.switchTab('concepts');
+        return;
+      }
+      if (e.key === '3') {
+        e.preventDefault();
+        this.switchTab('ask');
+        return;
+      }
+    }
+  }
+
+  private focusQueryInput() {
+    // Find the query input in the shadow DOM
+    const leftPanel = this.shadowRoot?.querySelector('left-panel');
+    if (leftPanel) {
+      const askTab = leftPanel.shadowRoot?.querySelector('ask-tab');
+      if (askTab) {
+        const queryInput = askTab.shadowRoot?.querySelector('query-input');
+        if (queryInput) {
+          const textarea = queryInput.shadowRoot?.querySelector('textarea');
+          if (textarea) {
+            textarea.focus();
+          }
+        }
+      }
+    }
+  }
+
+  private async flagLastExchange() {
+    if (!this.sessionId || this.conversation.length < 2) return;
+
+    // Find the last assistant message
+    const lastAssistantMsg = [...this.conversation]
+      .reverse()
+      .find(msg => msg.role === 'assistant');
+
+    if (lastAssistantMsg && lastAssistantMsg.id > 1) {
+      const isFlagged = this.flags.includes(lastAssistantMsg.id);
+
+      try {
+        if (isFlagged) {
+          await api.unflag(this.sessionId, lastAssistantMsg.id);
+          this.flags = this.flags.filter(id => id !== lastAssistantMsg.id);
+        } else {
+          await api.toggleFlag(this.sessionId, lastAssistantMsg.id);
+          this.flags = [...this.flags, lastAssistantMsg.id];
+        }
+      } catch (err) {
+        console.error('Failed to toggle flag:', err);
+      }
+    }
+  }
+
+  private switchTab(tab: 'outline' | 'concepts' | 'ask') {
+    if (this.leftPanel) {
+      // Access the activeTab property directly
+      (this.leftPanel as any).activeTab = tab;
+      sessionStorage.setActiveTab(tab);
+    }
+  }
 
   static styles = css`
     :host {
@@ -37,26 +169,8 @@ export class AppRoot extends LitElement {
       background: #f8f9fa;
     }
 
-    .panel-header {
-      padding: 16px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
-      flex-shrink: 0;
-    }
-
-    .panel-header h1 {
-      margin: 0 0 4px 0;
-      font-size: 18px;
-      color: #333;
-    }
-
-    .panel-header .filename {
-      margin: 0;
-      font-size: 13px;
-      color: #666;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    left-panel {
+      height: 100%;
     }
 
     .center-pane {
@@ -105,6 +219,29 @@ export class AppRoot extends LitElement {
       background: #1557b0;
     }
 
+    .secondary-btn {
+      padding: 14px 28px;
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .secondary-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .empty-state-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
     input[type='file'] {
       display: none;
     }
@@ -131,11 +268,6 @@ export class AppRoot extends LitElement {
       max-width: 500px;
       margin-bottom: 20px;
     }
-
-    ask-tab {
-      flex: 1;
-      min-height: 0;
-    }
   `;
 
   async handleFileUpload(e: Event) {
@@ -157,6 +289,9 @@ export class AppRoot extends LitElement {
       this.sessionId = session.session_id;
       this.filename = session.filename;
       this.pdfUrl = URL.createObjectURL(file);
+
+      // Save to session storage for "pick up where left off"
+      sessionStorage.setLastSessionId(session.session_id);
 
       // Initialize conversation with initial analysis
       this.conversation = [
@@ -200,17 +335,92 @@ export class AppRoot extends LitElement {
     this.selectedPage = undefined;
   }
 
+  handleNavigateToPage(e: CustomEvent<{ page: number }>) {
+    if (this.pdfViewer) {
+      this.pdfViewer.scrollToPage(e.detail.page);
+    }
+  }
+
+  handleHighlightConcept(e: CustomEvent<{ concept: Concept }>) {
+    // TODO: Implement concept highlighting in PDF viewer
+    // For now, navigate to the first page where the concept appears
+    const concept = e.detail.concept;
+    if (concept.pages.length > 0 && this.pdfViewer) {
+      this.pdfViewer.scrollToPage(concept.pages[0]);
+    }
+  }
+
+  handleShowSessionPicker() {
+    this.showSessionPicker = true;
+  }
+
+  handleCloseSessionPicker() {
+    this.showSessionPicker = false;
+  }
+
+  async handleSessionSelected(e: CustomEvent<{ session: Session }>) {
+    const { session } = e.detail;
+    this.showSessionPicker = false;
+    this.loading = true;
+    this.error = '';
+
+    try {
+      // Load full session data
+      const fullSession = await api.getSession(session.session_id);
+
+      this.sessionId = fullSession.session_id;
+      this.filename = fullSession.filename;
+      this.conversation = fullSession.conversation || [];
+      this.flags = fullSession.flags || [];
+
+      // Save to session storage
+      sessionStorage.setLastSessionId(fullSession.session_id);
+
+      // For now, we need the user to re-upload the PDF file
+      // In a full implementation, we'd fetch it from the backend
+      // Show a message that the PDF needs to be re-uploaded
+      this.pdfUrl = '';
+      this.loading = false;
+
+      // Display a notification or prompt to re-upload
+      alert('Session loaded! Please re-upload the PDF file to view it. Your conversation history has been restored.');
+
+    } catch (err) {
+      console.error('Failed to load session:', err);
+      if (err instanceof ApiError) {
+        this.error = err.message;
+      } else {
+        this.error = 'Failed to load session';
+      }
+      this.loading = false;
+    }
+  }
+
+  handleUploadNewFromPicker() {
+    this.showSessionPicker = false;
+    // Trigger file input click
+    const fileInput = this.shadowRoot?.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  }
+
   private renderEmptyState() {
     return html`
       <div class="empty-state">
         <h2>Paper Companion</h2>
         <p>
-          Upload a PDF to get started.
+          Upload a PDF to get started, or load a previous session.
         </p>
-        <label class="upload-btn">
-          Upload PDF
-          <input type="file" accept=".pdf" @change=${this.handleFileUpload} />
-        </label>
+        <div class="empty-state-actions">
+          <label class="upload-btn">
+            Upload PDF
+            <input type="file" accept=".pdf" @change=${this.handleFileUpload} />
+          </label>
+          <button class="secondary-btn" @click=${this.handleShowSessionPicker}>
+            Load Previous Session
+          </button>
+        </div>
       </div>
     `;
   }
@@ -242,24 +452,22 @@ export class AppRoot extends LitElement {
   render() {
     return html`
       <div class="left-panel">
-        <div class="panel-header">
-          <h1>Paper Companion</h1>
-          ${this.filename
-            ? html`<p class="filename" title="${this.filename}">${this.filename}</p>`
-            : ''}
-        </div>
-
-        <ask-tab
+        <left-panel
           .sessionId=${this.sessionId}
+          .filename=${this.filename}
           .conversation=${this.conversation}
           .flags=${this.flags}
+          .outline=${this.outline}
+          .concepts=${this.concepts}
           .selectedText=${this.selectedText}
           .selectedPage=${this.selectedPage}
           @conversation-updated=${(e: CustomEvent) =>
             (this.conversation = e.detail.conversation)}
           @flags-updated=${(e: CustomEvent) => (this.flags = e.detail.flags)}
           @clear-selection=${this.handleClearSelection}
-        ></ask-tab>
+          @navigate-to-page=${this.handleNavigateToPage}
+          @highlight-concept=${this.handleHighlightConcept}
+        ></left-panel>
       </div>
 
       <div class="center-pane">
@@ -276,6 +484,13 @@ export class AppRoot extends LitElement {
             `
           : this.renderEmptyState()}
       </div>
+
+      <session-list
+        .visible=${this.showSessionPicker}
+        @session-selected=${this.handleSessionSelected}
+        @close=${this.handleCloseSessionPicker}
+        @upload-new=${this.handleUploadNewFromPicker}
+      ></session-list>
     `;
   }
 }

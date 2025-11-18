@@ -1,5 +1,6 @@
 import type { Session, SessionFull } from '../types/session';
 import type { QueryRequest, QueryResponse } from '../types/query';
+import type { OutlineItem, Concept } from '../types/pdf';
 
 export class ApiError extends Error {
   constructor(
@@ -66,6 +67,44 @@ class ApiClient {
     if (!response.ok) {
       throw new ApiError(
         `Failed to get session: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get document outline (table of contents)
+   */
+  async getOutline(sessionId: string): Promise<OutlineItem[]> {
+    const response = await fetch(`${this.baseUrl}/sessions/${sessionId}/outline`);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return []; // No outline available
+      }
+      throw new ApiError(
+        `Failed to get outline: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get extracted key concepts from the document
+   */
+  async getConcepts(sessionId: string): Promise<Concept[]> {
+    const response = await fetch(`${this.baseUrl}/sessions/${sessionId}/concepts`);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return []; // No concepts available
+      }
+      throw new ApiError(
+        `Failed to get concepts: ${response.statusText}`,
         response.status
       );
     }
