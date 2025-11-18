@@ -207,6 +207,8 @@ export class ConversationItem extends LitElement {
   }
 
   private renderUserQuery() {
+    if (!this.userMessage) return '';
+
     const content = this.userMessage.content;
     const lines = content.split('\n');
     const hasMultipleLines = lines.length > 1 || content.length > 100;
@@ -244,6 +246,10 @@ export class ConversationItem extends LitElement {
   }
 
   render() {
+    if (!this.userMessage || !this.assistantMessage) {
+      return html``;
+    }
+
     return html`
       <div class="exchange">
         <div class="question-section">
