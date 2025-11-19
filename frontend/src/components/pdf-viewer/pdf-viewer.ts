@@ -319,14 +319,29 @@ export class PdfViewer extends LitElement {
   }
 
   async rerenderVisiblePages() {
-    // Cancel all active render tasks
-    this.renderTasks.forEach((task) => {
+    // Cancel all active render tasks and wait for them
+    const cancelPromises: Promise<void>[] = [];
+    this.renderTasks.forEach((task, pageNum) => {
       task.cancel();
+      cancelPromises.push(
+        task.promise.catch(() => {}).finally(() => {
+          this.renderTasks.delete(pageNum);
+          this.renderingPages.delete(pageNum);
+        })
+      );
     });
-    this.renderTasks.clear();
 
-    // Clear rendering state and re-render visible pages
+    // Wait for all cancellations to complete
+    await Promise.all(cancelPromises);
+
+    // Clear any remaining state
+    this.renderTasks.clear();
     this.renderingPages.clear();
+
+    // Small delay to ensure canvas is released
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Re-render visible pages
     const pageContainers = this.shadowRoot?.querySelectorAll('.page');
     pageContainers?.forEach((container) => {
       const pageNum = parseInt((container as HTMLElement).dataset.page || '0');
