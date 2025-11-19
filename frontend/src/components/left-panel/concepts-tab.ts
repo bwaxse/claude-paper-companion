@@ -202,13 +202,12 @@ export class ConceptsTab extends LitElement {
       border-radius: 4px;
       margin-bottom: 16px;
     }
-  `;
-
-  updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('sessionId') && this.sessionId) {
-      // Clear insights when session changes
-      this.insights = null;
+      // Clear error and reload when sessionId changes
       this.error = '';
+      if (this.localConcepts.length === 0) {
+        this.loadConcepts();
+      }
     }
   }
 

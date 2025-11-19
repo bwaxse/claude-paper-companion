@@ -269,11 +269,7 @@ export class AskTab extends LitElement {
       if (titleMatch) {
         paperTitle = titleMatch[1].trim();
       } else {
-        // Only use the header as title if it's not a generic summary header
-        const isGenericHeader = /^(Review Summary|Critical Review|5-Bullet Summary)$/i.test(fullTitle);
-        if (!isGenericHeader) {
-          paperTitle = fullTitle;
-        }
+        paperTitle = fullTitle;
       }
       content = content.substring(headerMatch[0].length).trim();
     }
