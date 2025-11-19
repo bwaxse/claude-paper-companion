@@ -125,9 +125,12 @@ export class OutlineTab extends LitElement {
     if (changedProperties.has('outline') && this.outline.length > 0) {
       this.localOutline = this.outline;
     }
-    // If sessionId changes and no outline provided, load it
-    if (changedProperties.has('sessionId') && this.sessionId && this.localOutline.length === 0) {
-      this.loadOutline();
+    // If sessionId changes, clear error and load outline if needed
+    if (changedProperties.has('sessionId') && this.sessionId) {
+      this.error = '';
+      if (this.localOutline.length === 0) {
+        this.loadOutline();
+      }
     }
   }
 
