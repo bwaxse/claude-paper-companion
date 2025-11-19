@@ -244,9 +244,8 @@ export class ConversationItem extends LitElement {
       `;
     }
 
-    // Show preview with first line and faded second line
-    const firstLine = lines[0];
-    const rest = lines.length > 1 ? lines[1] : content.substring(firstLine.length);
+    // Show preview with first line truncated
+    const firstLine = lines[0].length > 80 ? lines[0].substring(0, 80) + '...' : lines[0];
 
     return html`
       <span class="user-query user-query-preview" @click=${this.toggleExpand}>

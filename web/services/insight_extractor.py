@@ -74,7 +74,7 @@ class InsightExtractor:
         async with self.db.get_connection() as conn:
             # Get session
             session = await conn.execute(
-                "SELECT * FROM sessions WHERE session_id = ?",
+                "SELECT * FROM sessions WHERE id = ?",
                 (session_id,)
             )
             session_row = await session.fetchone()
@@ -85,10 +85,10 @@ class InsightExtractor:
             # Get all exchanges (conversation history)
             exchanges = await conn.execute(
                 """
-                SELECT id, role, content, model_used, created_at
-                FROM exchanges
+                SELECT id, role, content, model, timestamp as created_at
+                FROM conversations
                 WHERE session_id = ?
-                ORDER BY created_at ASC
+                ORDER BY timestamp ASC
                 """,
                 (session_id,)
             )
@@ -97,10 +97,10 @@ class InsightExtractor:
             # Get flagged exchanges
             flagged = await conn.execute(
                 """
-                SELECT e.id, e.role, e.content, f.note, f.created_at as flag_time
-                FROM exchanges e
-                JOIN flags f ON e.id = f.exchange_id
-                WHERE e.session_id = ?
+                SELECT c.id, c.role, c.content, f.note, f.created_at as flag_time
+                FROM conversations c
+                JOIN flags f ON c.exchange_id = f.exchange_id AND c.session_id = f.session_id
+                WHERE c.session_id = ?
                 ORDER BY f.created_at ASC
                 """,
                 (session_id,)
@@ -119,8 +119,17 @@ class InsightExtractor:
             )
             highlights_data = await highlights.fetchall()
 
-        # Prepare conversation summary
-        conv_summary = self._format_conversation(exchanges_data)
+            # Get the PDF text and initial analysis for context
+            pdf_text_result = await conn.execute(
+                "SELECT full_text, initial_analysis FROM sessions WHERE id = ?",
+                (session_id,)
+            )
+            pdf_text_row = await pdf_text_result.fetchone()
+            pdf_text = pdf_text_row[0] if pdf_text_row else ""
+            initial_analysis = pdf_text_row[1] if pdf_text_row and len(pdf_text_row) > 1 else ""
+
+        # Prepare conversation summary (include initial analysis)
+        conv_summary = self._format_conversation(exchanges_data, initial_analysis)
         flagged_summary = self._format_flagged_exchanges(exchanges_data, flagged_data)
         highlights_summary = self._format_highlights(highlights_data)
 
@@ -176,13 +185,15 @@ Provide ONLY the JSON object, no additional text.
 """
 
         # Call Claude to extract insights
-        response = await self.claude.query(
-            messages=[{"role": "user", "content": extraction_prompt}],
+        response_text, usage = await self.claude.query(
+            user_query=extraction_prompt,
+            pdf_text=pdf_text,
+            conversation_history=[],
             use_sonnet=False  # Use Haiku for cost efficiency
         )
 
         # Parse JSON from response
-        insights = self._parse_insights_json(response["content"])
+        insights = self._parse_insights_json(response_text)
 
         # Add metadata
         insights["metadata"] = {
@@ -201,9 +212,16 @@ Provide ONLY the JSON object, no additional text.
 
         return insights
 
-    def _format_conversation(self, exchanges: List) -> str:
+    def _format_conversation(self, exchanges: List, initial_analysis: str = "") -> str:
         """Format exchanges as conversation summary."""
         conversation = []
+
+        # Include initial analysis as the first exchange
+        if initial_analysis:
+            conversation.append(
+                f"User: Please provide an initial analysis of this paper.\n"
+                f"Assistant: {initial_analysis[:1500]}..."  # Truncate but keep more of the summary
+            )
 
         # Group exchanges by pairs (user, assistant)
         for i in range(0, len(exchanges) - 1, 2):

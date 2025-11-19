@@ -353,12 +353,13 @@ class SessionManager:
             total_row = await cursor.fetchone()
             total = total_row[0] if total_row else 0
 
-            # Get sessions
+            # Get sessions with metadata title
             cursor = await db.execute(
                 """
-                SELECT id, filename, zotero_key, created_at, updated_at
-                FROM sessions
-                ORDER BY created_at DESC
+                SELECT s.id, s.filename, s.zotero_key, s.created_at, s.updated_at, m.title
+                FROM sessions s
+                LEFT JOIN metadata m ON s.id = m.session_id
+                ORDER BY s.created_at DESC
                 LIMIT ? OFFSET ?
                 """,
                 (limit, offset)
@@ -368,9 +369,11 @@ class SessionManager:
             # Build session list items
             sessions = []
             for row in session_rows:
+                # Use title from metadata if available, otherwise use filename
+                display_name = row[5] if row[5] else row[1]
                 sessions.append(SessionListItem(
                     session_id=row[0],
-                    filename=row[1],
+                    filename=display_name,
                     created_at=datetime.fromisoformat(row[3]) if row[3] else datetime.utcnow(),
                     updated_at=datetime.fromisoformat(row[4]) if row[4] else datetime.utcnow(),
                     zotero_key=row[2]
