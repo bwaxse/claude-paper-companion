@@ -370,20 +370,44 @@ export class AppRoot extends LitElement {
 
       this.sessionId = fullSession.session_id;
       this.filename = fullSession.filename;
-      this.conversation = fullSession.conversation || [];
       this.flags = fullSession.flags || [];
+
+      // Build conversation with initial analysis as first messages
+      const initialMessages: ConversationMessage[] = [];
+      if (fullSession.initial_analysis) {
+        initialMessages.push({
+          id: 0,
+          role: 'user',
+          content: 'Initial analysis',
+          timestamp: fullSession.created_at
+        });
+        initialMessages.push({
+          id: 1,
+          role: 'assistant',
+          content: fullSession.initial_analysis,
+          timestamp: fullSession.created_at
+        });
+      }
+
+      // Convert conversation messages from API format to frontend format
+      const conversationMessages: ConversationMessage[] = (fullSession.conversation || []).map((msg: any) => ({
+        id: msg.exchange_id,
+        role: msg.role,
+        content: msg.content,
+        model: msg.model,
+        highlighted_text: msg.highlighted_text,
+        page: msg.page_number,
+        timestamp: msg.timestamp
+      }));
+
+      this.conversation = [...initialMessages, ...conversationMessages];
 
       // Save to session storage
       sessionStorage.setLastSessionId(fullSession.session_id);
 
-      // For now, we need the user to re-upload the PDF file
-      // In a full implementation, we'd fetch it from the backend
-      // Show a message that the PDF needs to be re-uploaded
-      this.pdfUrl = '';
+      // Load PDF from backend
+      this.pdfUrl = `/sessions/${fullSession.session_id}/pdf`;
       this.loading = false;
-
-      // Display a notification or prompt to re-upload
-      alert('Session loaded! Please re-upload the PDF file to view it. Your conversation history has been restored.');
 
     } catch (err) {
       console.error('Failed to load session:', err);

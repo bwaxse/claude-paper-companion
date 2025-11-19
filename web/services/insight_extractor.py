@@ -74,7 +74,7 @@ class InsightExtractor:
         async with self.db.get_connection() as conn:
             # Get session
             session = await conn.execute(
-                "SELECT * FROM sessions WHERE session_id = ?",
+                "SELECT * FROM sessions WHERE id = ?",
                 (session_id,)
             )
             session_row = await session.fetchone()
@@ -85,10 +85,10 @@ class InsightExtractor:
             # Get all exchanges (conversation history)
             exchanges = await conn.execute(
                 """
-                SELECT id, role, content, model_used, created_at
-                FROM exchanges
+                SELECT id, role, content, model, timestamp as created_at
+                FROM conversations
                 WHERE session_id = ?
-                ORDER BY created_at ASC
+                ORDER BY timestamp ASC
                 """,
                 (session_id,)
             )
@@ -97,10 +97,10 @@ class InsightExtractor:
             # Get flagged exchanges
             flagged = await conn.execute(
                 """
-                SELECT e.id, e.role, e.content, f.note, f.created_at as flag_time
-                FROM exchanges e
-                JOIN flags f ON e.id = f.exchange_id
-                WHERE e.session_id = ?
+                SELECT c.id, c.role, c.content, f.note, f.created_at as flag_time
+                FROM conversations c
+                JOIN flags f ON c.exchange_id = f.exchange_id AND c.session_id = f.session_id
+                WHERE c.session_id = ?
                 ORDER BY f.created_at ASC
                 """,
                 (session_id,)
