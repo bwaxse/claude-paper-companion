@@ -21,6 +21,11 @@ interface Insights {
     total_exchanges?: number;
     flagged_count?: number;
   };
+  _cache_info?: {
+    no_new_exchanges: boolean;
+    cached_at?: string;
+    exchange_count?: number;
+  };
 }
 
 @customElement('concepts-tab')
@@ -202,6 +207,34 @@ export class ConceptsTab extends LitElement {
       border-radius: 4px;
       margin-bottom: 16px;
     }
+
+    .cache-warning {
+      padding: 12px;
+      margin-bottom: 16px;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #92400e;
+    }
+
+    .cache-warning p {
+      margin: 0 0 8px 0;
+    }
+
+    .cache-warning-btn {
+      padding: 6px 12px;
+      background: #f59e0b;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .cache-warning-btn:hover {
+      background: #d97706;
+    }
   `;
 
   updated(changedProperties: Map<string, unknown>) {
@@ -212,14 +245,14 @@ export class ConceptsTab extends LitElement {
     }
   }
 
-  private async extractInsights() {
+  private async extractInsights(force: boolean = false) {
     if (!this.sessionId) return;
 
     this.loading = true;
     this.error = '';
 
     try {
-      const insights = await api.getConcepts(this.sessionId);
+      const insights = await api.getConcepts(this.sessionId, force);
       this.insights = insights;
     } catch (err) {
       console.error('Failed to extract insights:', err);
@@ -227,6 +260,10 @@ export class ConceptsTab extends LitElement {
     } finally {
       this.loading = false;
     }
+  }
+
+  private forceExtract() {
+    this.extractInsights(true);
   }
 
   private renderSection(title: string, icon: string, items: string[] | undefined) {
@@ -338,6 +375,15 @@ export class ConceptsTab extends LitElement {
     // Render extracted insights
     return html`
       <div class="insights-container">
+        ${this.insights._cache_info?.no_new_exchanges ? html`
+          <div class="cache-warning">
+            <p>No new questions since last extraction. Ask more questions for richer insights.</p>
+            <button class="cache-warning-btn" @click=${this.forceExtract}>
+              Re-extract anyway
+            </button>
+          </div>
+        ` : ''}
+
         ${this.insights.metadata ? html`
           <div class="metadata">
             Based on ${this.insights.metadata.total_exchanges || 0} exchanges
