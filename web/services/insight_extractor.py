@@ -195,12 +195,13 @@ Focus especially on the FLAGGED exchanges as these were marked as important duri
 Provide ONLY the JSON object, no additional text.
 """
 
-        # Call Claude to extract insights
-        response_text, usage = await self.claude.query(
-            user_query=extraction_prompt,
+        # Call Claude to extract insights using structured extraction
+        # This uses higher token limits and no brevity constraints
+        response_text, usage = await self.claude.extract_structured(
+            extraction_prompt=extraction_prompt,
             pdf_text=pdf_text,
-            conversation_history=[],
-            use_sonnet=False  # Use Haiku for cost efficiency
+            conversation_context=conv_summary,
+            max_tokens=4000  # Sufficient for complete JSON response
         )
 
         # Parse JSON from response
