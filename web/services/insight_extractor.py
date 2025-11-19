@@ -144,8 +144,12 @@ class InsightExtractor:
         flagged_summary = self._format_flagged_exchanges(exchanges_data, flagged_data)
         highlights_summary = self._format_highlights(highlights_data)
 
-        # Build extraction prompt
+        # Build extraction prompt - use initial analysis as paper context, not full PDF
+        # This ensures insights reflect what was actually discussed, not a fresh analysis
         extraction_prompt = f"""Based on our conversation about this paper, extract insights and organize them THEMATICALLY.
+
+INITIAL PAPER SUMMARY:
+{initial_analysis}
 
 CONVERSATION ({len(exchanges_data) // 2} exchanges):
 {conv_summary[:10000]}
@@ -196,11 +200,12 @@ Provide ONLY the JSON object, no additional text.
 """
 
         # Call Claude to extract insights using structured extraction
-        # This uses higher token limits and no brevity constraints
+        # Uses summary + conversation only (not full PDF) to ensure insights
+        # reflect what was actually discussed in the session
         response_text, usage = await self.claude.extract_structured(
             extraction_prompt=extraction_prompt,
-            pdf_text=pdf_text,
-            conversation_context=conv_summary,
+            pdf_text="",  # Don't send full PDF - use initial_analysis in prompt instead
+            conversation_context="",  # Already included in extraction_prompt
             max_tokens=4000  # Sufficient for complete JSON response
         )
 

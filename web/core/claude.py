@@ -379,15 +379,17 @@ Paper content:
         messages = []
 
         # System context focused on accurate extraction
-        system_content = f"""You are analyzing a research paper and extracting structured insights.
+        system_content = """You are analyzing a research paper and extracting structured insights.
 
 Your task is to extract information and return it as valid JSON.
 Be thorough and complete - include all relevant information.
-Focus on accuracy and completeness over brevity.
+Focus on accuracy and completeness over brevity."""
 
-Paper content:
-{pdf_text[:100000]}"""
+        # Add paper content if provided
+        if pdf_text:
+            system_content += f"\n\nPaper content:\n{pdf_text[:100000]}"
 
+        # Add conversation context if provided
         if conversation_context:
             system_content += f"\n\nConversation context:\n{conversation_context}"
 
