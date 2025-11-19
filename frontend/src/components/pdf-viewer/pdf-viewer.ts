@@ -256,6 +256,9 @@ export class PdfViewer extends LitElement {
       canvas.height = viewport.height;
       const context = canvas.getContext('2d');
       if (context) {
+        // Clear the canvas before rendering
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
         const renderTask = page.render({ canvasContext: context, viewport });
         this.renderTasks.set(pageNum, renderTask);
 

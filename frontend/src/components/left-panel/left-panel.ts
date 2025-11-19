@@ -1,7 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ConversationMessage } from '../../types/session';
-import type { Concept } from '../../types/pdf';
 import './ask-tab';
 import './concepts-tab';
 
@@ -13,7 +12,6 @@ export class LeftPanel extends LitElement {
   @property({ type: String }) filename = '';
   @property({ type: Array }) conversation: ConversationMessage[] = [];
   @property({ type: Array }) flags: number[] = [];
-  @property({ type: Array }) concepts: Concept[] = [];
   @property({ type: String }) selectedText = '';
   @property({ type: Number }) selectedPage?: number;
 
@@ -115,26 +113,6 @@ export class LeftPanel extends LitElement {
     );
   }
 
-  private handleNavigateToPage(e: CustomEvent<{ page: number }>) {
-    this.dispatchEvent(
-      new CustomEvent('navigate-to-page', {
-        detail: e.detail,
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
-
-  private handleHighlightConcept(e: CustomEvent<{ concept: Concept }>) {
-    this.dispatchEvent(
-      new CustomEvent('highlight-concept', {
-        detail: e.detail,
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
-
   render() {
     return html`
       <div class="panel-header">
@@ -151,7 +129,7 @@ export class LeftPanel extends LitElement {
                 class="tab-button ${this.activeTab === 'concepts' ? 'active' : ''}"
                 @click=${() => this.handleTabClick('concepts')}
               >
-                Concepts
+                Insights
               </button>
               <button
                 class="tab-button ${this.activeTab === 'ask' ? 'active' : ''}"
@@ -166,10 +144,7 @@ export class LeftPanel extends LitElement {
       <div class="tab-content">
         <concepts-tab
           class="${this.activeTab === 'concepts' ? 'active' : ''}"
-          .concepts=${this.concepts}
           .sessionId=${this.sessionId}
-          @navigate-to-page=${this.handleNavigateToPage}
-          @highlight-concept=${this.handleHighlightConcept}
         ></concepts-tab>
 
         <ask-tab

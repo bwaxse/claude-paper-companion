@@ -3,7 +3,7 @@ import { customElement, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../services/api';
 import { sessionStorage } from '../services/session-storage';
 import type { ConversationMessage, Session } from '../types/session';
-import type { TextSelection, Concept } from '../types/pdf';
+import type { TextSelection } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
 import './left-panel/left-panel';
 import './session-picker/session-list';
@@ -19,7 +19,6 @@ export class AppRoot extends LitElement {
   @state() private pdfUrl = '';
   @state() private conversation: ConversationMessage[] = [];
   @state() private flags: number[] = [];
-  @state() private concepts: Concept[] = [];
   @state() private selectedText = '';
   @state() private selectedPage?: number;
   @state() private loading = false;
@@ -335,15 +334,6 @@ export class AppRoot extends LitElement {
     }
   }
 
-  handleHighlightConcept(e: CustomEvent<{ concept: Concept }>) {
-    // TODO: Implement concept highlighting in PDF viewer
-    // For now, navigate to the first page where the concept appears
-    const concept = e.detail.concept;
-    if (concept.pages.length > 0 && this.pdfViewer) {
-      this.pdfViewer.scrollToPage(concept.pages[0]);
-    }
-  }
-
   handleShowSessionPicker() {
     this.showSessionPicker = true;
   }
@@ -475,7 +465,6 @@ export class AppRoot extends LitElement {
           .filename=${this.filename}
           .conversation=${this.conversation}
           .flags=${this.flags}
-          .concepts=${this.concepts}
           .selectedText=${this.selectedText}
           .selectedPage=${this.selectedPage}
           @conversation-updated=${(e: CustomEvent) =>
@@ -483,7 +472,6 @@ export class AppRoot extends LitElement {
           @flags-updated=${(e: CustomEvent) => (this.flags = e.detail.flags)}
           @clear-selection=${this.handleClearSelection}
           @navigate-to-page=${this.handleNavigateToPage}
-          @highlight-concept=${this.handleHighlightConcept}
         ></left-panel>
       </div>
 

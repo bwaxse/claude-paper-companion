@@ -1,19 +1,35 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Concept } from '../../types/pdf';
 import { api } from '../../services/api';
 import '../shared/loading-spinner';
 
+interface Insights {
+  strengths?: string[];
+  weaknesses?: string[];
+  methodological_notes?: string[];
+  theoretical_contributions?: string[];
+  empirical_findings?: string[];
+  questions_raised?: string[];
+  applications?: string[];
+  key_quotes?: Array<{
+    user: string;
+    assistant: string;
+    theme?: string;
+    note?: string;
+  }>;
+  metadata?: {
+    total_exchanges?: number;
+    flagged_count?: number;
+  };
+}
+
 @customElement('concepts-tab')
 export class ConceptsTab extends LitElement {
-  @property({ type: Array }) concepts: Concept[] = [];
   @property({ type: String }) sessionId = '';
 
   @state() private loading = false;
   @state() private error = '';
-  @state() private localConcepts: Concept[] = [];
-  @state() private searchQuery = '';
-  @state() private selectedConcept?: Concept;
+  @state() private insights: Insights | null = null;
 
   static styles = css`
     :host {
@@ -24,118 +40,73 @@ export class ConceptsTab extends LitElement {
       overflow: hidden;
     }
 
-    .search-container {
-      padding: 12px 16px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
-      flex-shrink: 0;
-    }
-
-    .search-input {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 13px;
-      outline: none;
-      box-sizing: border-box;
-    }
-
-    .search-input:focus {
-      border-color: #1a73e8;
-      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
-    }
-
-    .concepts-container {
+    .insights-container {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
+      padding: 16px;
     }
 
-    .concept-item {
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px;
+      gap: 6px;
+    }
+
+    .section-title .icon {
+      font-size: 16px;
+    }
+
+    .insight-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .insight-item {
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #333;
+    }
+
+    .quote-item {
+      padding: 12px;
       margin-bottom: 8px;
       background: white;
       border: 1px solid #e0e0e0;
       border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.15s;
+      border-left: 3px solid #1a73e8;
     }
 
-    .concept-item:hover {
-      border-color: #1a73e8;
-      background: #f8fbff;
-    }
-
-    .concept-item.selected {
-      border-color: #1a73e8;
-      background: #e8f0fe;
-    }
-
-    .concept-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .concept-term {
-      font-weight: 500;
-      font-size: 13px;
-      color: #333;
-      margin-bottom: 4px;
-    }
-
-    .concept-meta {
-      font-size: 11px;
-      color: #666;
-    }
-
-    .concept-frequency {
-      background: #f0f0f0;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      color: #555;
-      font-weight: 500;
-      flex-shrink: 0;
-      margin-left: 12px;
-    }
-
-    .pages-list {
-      margin-top: 8px;
-      padding: 8px;
-      background: #f5f5f5;
-      border-radius: 4px;
-    }
-
-    .pages-title {
-      font-size: 11px;
+    .quote-question {
+      font-size: 12px;
       color: #666;
       margin-bottom: 6px;
     }
 
-    .page-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
+    .quote-answer {
+      font-size: 13px;
+      color: #333;
+      line-height: 1.5;
     }
 
-    .page-link {
-      padding: 2px 6px;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 3px;
+    .quote-note {
       font-size: 11px;
       color: #1a73e8;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .page-link:hover {
-      background: #e8f0fe;
-      border-color: #1a73e8;
+      margin-top: 6px;
+      font-style: italic;
     }
 
     .empty-state {
@@ -156,16 +127,45 @@ export class ConceptsTab extends LitElement {
     }
 
     .empty-state p {
-      margin: 0;
+      margin: 0 0 20px 0;
       font-size: 14px;
       line-height: 1.5;
     }
 
+    .extract-btn {
+      padding: 12px 24px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .extract-btn:hover {
+      background: #1557b0;
+    }
+
+    .extract-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
     .loading-container {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       padding: 32px;
+      height: 100%;
+    }
+
+    .loading-text {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #666;
     }
 
     .error-message {
@@ -176,130 +176,91 @@ export class ConceptsTab extends LitElement {
       border-radius: 6px;
       color: #dc2626;
       font-size: 13px;
+      text-align: center;
     }
 
-    .no-results {
-      text-align: center;
-      padding: 24px;
-      color: #666;
+    .retry-btn {
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
       font-size: 13px;
+    }
+
+    .retry-btn:hover {
+      background: #b91c1c;
+    }
+
+    .metadata {
+      font-size: 11px;
+      color: #666;
+      padding: 8px 12px;
+      background: #f0f0f0;
+      border-radius: 4px;
+      margin-bottom: 16px;
     }
   `;
 
-  connectedCallback() {
-    super.connectedCallback();
-    if (this.sessionId && this.concepts.length === 0) {
-      this.loadConcepts();
-    }
-  }
-
   updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('concepts') && this.concepts.length > 0) {
-      this.localConcepts = this.concepts;
-    }
     if (changedProperties.has('sessionId') && this.sessionId) {
-      // Clear error and reload when sessionId changes
+      // Clear insights when session changes
+      this.insights = null;
       this.error = '';
-      if (this.localConcepts.length === 0) {
-        this.loadConcepts();
-      }
     }
   }
 
-  private async loadConcepts() {
+  private async extractInsights() {
     if (!this.sessionId) return;
 
     this.loading = true;
     this.error = '';
 
     try {
-      const concepts = await api.getConcepts(this.sessionId);
-      this.localConcepts = concepts;
+      const insights = await api.getConcepts(this.sessionId);
+      this.insights = insights;
     } catch (err) {
-      console.error('Failed to load concepts:', err);
-      this.error = 'Failed to load key concepts';
+      console.error('Failed to extract insights:', err);
+      this.error = 'Failed to extract insights. Please try again.';
     } finally {
       this.loading = false;
     }
   }
 
-  private handleSearchInput(e: Event) {
-    const input = e.target as HTMLInputElement;
-    this.searchQuery = input.value.toLowerCase();
-  }
-
-  private handleConceptClick(concept: Concept) {
-    if (this.selectedConcept?.term === concept.term) {
-      this.selectedConcept = undefined;
-    } else {
-      this.selectedConcept = concept;
-      this.dispatchEvent(
-        new CustomEvent('highlight-concept', {
-          detail: { concept },
-          bubbles: true,
-          composed: true
-        })
-      );
-    }
-  }
-
-  private handlePageClick(page: number, e: Event) {
-    e.stopPropagation();
-    this.dispatchEvent(
-      new CustomEvent('navigate-to-page', {
-        detail: { page },
-        bubbles: true,
-        composed: true
-      })
-    );
-  }
-
-  private getFilteredConcepts(): Concept[] {
-    const concepts = this.localConcepts.length > 0 ? this.localConcepts : this.concepts;
-
-    if (!this.searchQuery) {
-      return concepts;
-    }
-
-    return concepts.filter((concept) =>
-      concept.term.toLowerCase().includes(this.searchQuery)
-    );
-  }
-
-  private renderConceptItem(concept: Concept) {
-    const isSelected = this.selectedConcept?.term === concept.term;
+  private renderSection(title: string, icon: string, items: string[] | undefined) {
+    if (!items || items.length === 0) return '';
 
     return html`
-      <div
-        class="concept-item ${isSelected ? 'selected' : ''}"
-        @click=${() => this.handleConceptClick(concept)}
-      >
-        <div class="concept-info">
-          <div class="concept-term">${concept.term}</div>
-          <div class="concept-meta">
-            ${concept.pages.length} ${concept.pages.length === 1 ? 'page' : 'pages'}
-          </div>
-          ${isSelected && concept.pages.length > 0
-            ? html`
-                <div class="pages-list">
-                  <div class="pages-title">Found on pages:</div>
-                  <div class="page-links">
-                    ${concept.pages.map(
-                      (page) => html`
-                        <button
-                          class="page-link"
-                          @click=${(e: Event) => this.handlePageClick(page, e)}
-                        >
-                          ${page}
-                        </button>
-                      `
-                    )}
-                  </div>
-                </div>
-              `
-            : ''}
+      <div class="section">
+        <div class="section-title">
+          <span class="icon">${icon}</span>
+          ${title}
         </div>
-        <span class="concept-frequency">${concept.frequency}x</span>
+        <ul class="insight-list">
+          ${items.map(item => html`<li class="insight-item">${item}</li>`)}
+        </ul>
+      </div>
+    `;
+  }
+
+  private renderQuotes() {
+    if (!this.insights?.key_quotes || this.insights.key_quotes.length === 0) return '';
+
+    return html`
+      <div class="section">
+        <div class="section-title">
+          <span class="icon">💬</span>
+          Key Exchanges
+        </div>
+        ${this.insights.key_quotes.map(quote => html`
+          <div class="quote-item">
+            <div class="quote-question"><strong>Q:</strong> ${quote.user}</div>
+            <div class="quote-answer">${quote.assistant}</div>
+            ${quote.note ? html`<div class="quote-note">${quote.note}</div>` : ''}
+          </div>
+        `)}
       </div>
     `;
   }
@@ -309,7 +270,7 @@ export class ConceptsTab extends LitElement {
       return html`
         <div class="empty-state">
           <h3>No paper loaded</h3>
-          <p>Upload a PDF to view key concepts.</p>
+          <p>Upload a PDF to extract insights.</p>
         </div>
       `;
     }
@@ -317,45 +278,55 @@ export class ConceptsTab extends LitElement {
     if (this.loading) {
       return html`
         <div class="loading-container">
-          <loading-spinner message="Extracting concepts..."></loading-spinner>
+          <loading-spinner></loading-spinner>
+          <div class="loading-text">Analyzing conversation and extracting insights...</div>
         </div>
       `;
     }
 
     if (this.error) {
       return html`
-        <div class="error-message">${this.error}</div>
-      `;
-    }
-
-    const allConcepts = this.localConcepts.length > 0 ? this.localConcepts : this.concepts;
-
-    if (allConcepts.length === 0) {
-      return html`
-        <div class="empty-state">
-          <h3>No concepts extracted</h3>
-          <p>Key concepts couldn't be extracted from this document.</p>
+        <div class="error-message">
+          ${this.error}
+          <br>
+          <button class="retry-btn" @click=${this.extractInsights}>Try Again</button>
         </div>
       `;
     }
 
-    const filteredConcepts = this.getFilteredConcepts();
+    if (!this.insights) {
+      return html`
+        <div class="empty-state">
+          <h3>Extract Insights</h3>
+          <p>
+            Analyze your conversation to extract key insights,
+            strengths, weaknesses, and important exchanges.
+          </p>
+          <button class="extract-btn" @click=${this.extractInsights}>
+            Extract Insights
+          </button>
+        </div>
+      `;
+    }
 
+    // Render extracted insights
     return html`
-      <div class="search-container">
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search concepts..."
-          .value=${this.searchQuery}
-          @input=${this.handleSearchInput}
-        />
-      </div>
+      <div class="insights-container">
+        ${this.insights.metadata ? html`
+          <div class="metadata">
+            Based on ${this.insights.metadata.total_exchanges || 0} exchanges
+            ${this.insights.metadata.flagged_count ? ` • ${this.insights.metadata.flagged_count} flagged` : ''}
+          </div>
+        ` : ''}
 
-      <div class="concepts-container">
-        ${filteredConcepts.length === 0
-          ? html`<div class="no-results">No concepts match your search</div>`
-          : filteredConcepts.map((concept) => this.renderConceptItem(concept))}
+        ${this.renderSection('Strengths', '💪', this.insights.strengths)}
+        ${this.renderSection('Weaknesses', '⚠️', this.insights.weaknesses)}
+        ${this.renderSection('Methodological Notes', '🔬', this.insights.methodological_notes)}
+        ${this.renderSection('Theoretical Contributions', '💡', this.insights.theoretical_contributions)}
+        ${this.renderSection('Key Findings', '📊', this.insights.empirical_findings)}
+        ${this.renderSection('Questions Raised', '❓', this.insights.questions_raised)}
+        ${this.renderSection('Applications', '🚀', this.insights.applications)}
+        ${this.renderQuotes()}
       </div>
     `;
   }
