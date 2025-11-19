@@ -1,12 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ConversationMessage } from '../../types/session';
-import type { OutlineItem, Concept } from '../../types/pdf';
+import type { Concept } from '../../types/pdf';
 import './ask-tab';
-import './outline-tab';
 import './concepts-tab';
 
-export type TabType = 'outline' | 'concepts' | 'ask';
+export type TabType = 'concepts' | 'ask';
 
 @customElement('left-panel')
 export class LeftPanel extends LitElement {
@@ -14,7 +13,6 @@ export class LeftPanel extends LitElement {
   @property({ type: String }) filename = '';
   @property({ type: Array }) conversation: ConversationMessage[] = [];
   @property({ type: Array }) flags: number[] = [];
-  @property({ type: Array }) outline: OutlineItem[] = [];
   @property({ type: Array }) concepts: Concept[] = [];
   @property({ type: String }) selectedText = '';
   @property({ type: Number }) selectedPage?: number;
@@ -150,12 +148,6 @@ export class LeftPanel extends LitElement {
         ? html`
             <div class="tabs">
               <button
-                class="tab-button ${this.activeTab === 'outline' ? 'active' : ''}"
-                @click=${() => this.handleTabClick('outline')}
-              >
-                Outline
-              </button>
-              <button
                 class="tab-button ${this.activeTab === 'concepts' ? 'active' : ''}"
                 @click=${() => this.handleTabClick('concepts')}
               >
@@ -172,13 +164,6 @@ export class LeftPanel extends LitElement {
         : ''}
 
       <div class="tab-content">
-        <outline-tab
-          class="${this.activeTab === 'outline' ? 'active' : ''}"
-          .outline=${this.outline}
-          .sessionId=${this.sessionId}
-          @navigate-to-page=${this.handleNavigateToPage}
-        ></outline-tab>
-
         <concepts-tab
           class="${this.activeTab === 'concepts' ? 'active' : ''}"
           .concepts=${this.concepts}
