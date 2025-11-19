@@ -257,6 +257,13 @@ export class ConceptsTab extends LitElement {
     }
   `;
 
+  firstUpdated() {
+    // Load cached insights on initial render if session exists
+    if (this.sessionId) {
+      this.loadCachedInsights();
+    }
+  }
+
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('sessionId') && this.sessionId) {
       // Clear insights and try to load cached when session changes
