@@ -37,3 +37,12 @@ export interface BoundingBox {
   width: number;
   height: number;
 }
+
+export interface ZoteroItem {
+  key: string;
+  title: string;
+  authors: string;
+  year?: string;
+  publication?: string;
+  item_type: string;
+}

@@ -1,4 +1,4 @@
-import type { Session, SessionFull } from '../types/session';
+import type { Session, SessionFull, ZoteroItem } from '../types/session';
 import type { QueryRequest, QueryResponse } from '../types/query';
 import type { OutlineItem } from '../types/pdf';
 
@@ -236,7 +236,7 @@ class ApiClient {
   /**
    * Search Zotero library
    */
-  async searchZotero(query: string, limit = 20): Promise<any[]> {
+  async searchZotero(query: string, limit = 20): Promise<ZoteroItem[]> {
     const response = await fetch(
       `${this.baseUrl}/zotero/search?query=${encodeURIComponent(query)}&limit=${limit}`
     );
@@ -248,13 +248,15 @@ class ApiClient {
       );
     }
 
-    return response.json();
+    const data = await response.json();
+    // Backend returns {items: [...], total: n}
+    return data.items || [];
   }
 
   /**
    * Get recent papers from Zotero
    */
-  async getRecentPapers(limit = 20): Promise<any[]> {
+  async getRecentPapers(limit = 20): Promise<ZoteroItem[]> {
     const response = await fetch(`${this.baseUrl}/zotero/recent?limit=${limit}`);
 
     if (!response.ok) {

@@ -357,21 +357,7 @@ class LeftPanel extends LitElement {
 ```
 
 ### Task 8: Outline Tab
-**File: `src/components/left-panel/outline-tab.ts`**
-
-- [ ] Display hierarchical outline from backend
-- [ ] Click outline item → scroll to page
-- [ ] Nested structure (h1, h2, h3)
-- [ ] Current section highlighting
-
-**Get outline from backend:**
-```typescript
-// Backend should provide outline via new endpoint
-GET /sessions/{id}/outline
-Response: OutlineItem[]
-```
-
-**Note:** Backend needs to extract outline in Phase A (Task 3 mentions this, ensure it's implemented)
+**REMOVED** - Outline tab functionality not needed for MVP. Focus on Insights and Ask tabs.
 
 ### Task 9: Concepts Tab
 **File: `src/components/left-panel/concepts-tab.ts`**
@@ -582,13 +568,8 @@ Close modal, load session
 - [ ] `Escape` - Clear text selection
 - [ ] `1/2/3` - Switch tabs (when not typing)
 
-### Task 20: Responsive Design (Optional)
-**If time permits:**
-
-- [ ] Mobile breakpoint (< 768px)
-- [ ] Stack layout (panel above PDF)
-- [ ] Touch-friendly buttons
-- [ ] Hamburger menu for tabs
+### Task 20: Responsive Design
+**REMOVED** - Desktop-only for MVP. Mobile support deferred to future phase.
 
 ### Task 21: Testing
 **File: `tests/frontend/`**
@@ -658,12 +639,10 @@ Close modal, load session
 - ✅ Can upload PDF → see it rendered with text selection
 - ✅ Can select text → query about it → see response
 - ✅ Can flag exchanges
-- ✅ Can navigate via outline
-- ✅ Can see key concepts
-- ✅ Can load paper from Zotero
+- ✅ Can see key concepts/insights
+- ✅ Can load paper from Zotero (with picker UI)
 - ✅ Can "pick up where left off" (session list)
-- ✅ All three tabs functional
-- ✅ Responsive design works
+- ✅ Both tabs functional (Insights, Ask)
 - ✅ Production build deploys successfully
 
 ## Development Workflow
