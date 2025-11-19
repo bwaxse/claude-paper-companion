@@ -11,11 +11,10 @@ interface Insights {
   empirical_findings?: string[];
   questions_raised?: string[];
   applications?: string[];
-  key_quotes?: Array<{
-    user: string;
-    assistant: string;
+  key_lessons?: Array<{
+    lesson: string;
     theme?: string;
-    note?: string;
+    importance?: string;
   }>;
   metadata?: {
     total_exchanges?: number;
@@ -260,9 +259,23 @@ export class ConceptsTab extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('sessionId') && this.sessionId) {
-      // Clear insights when session changes
+      // Clear insights and try to load cached when session changes
       this.insights = null;
       this.error = '';
+      this.loadCachedInsights();
+    }
+  }
+
+  private async loadCachedInsights() {
+    // Try to load cached insights without showing loading state
+    // This gives instant feedback if insights were previously extracted
+    try {
+      const insights = await api.getConcepts(this.sessionId, false, true); // cache_only=true
+      if (insights) {
+        this.insights = insights;
+      }
+    } catch {
+      // Silently fail - user can click Extract button
     }
   }
 
@@ -303,20 +316,19 @@ export class ConceptsTab extends LitElement {
     `;
   }
 
-  private renderQuotes() {
-    if (!this.insights?.key_quotes || this.insights.key_quotes.length === 0) return '';
+  private renderLessons() {
+    if (!this.insights?.key_lessons || this.insights.key_lessons.length === 0) return '';
 
     return html`
       <div class="section">
         <div class="section-title">
-          <span class="icon">💬</span>
-          Key Exchanges
+          <span class="icon">💡</span>
+          Key Lessons
         </div>
-        ${this.insights.key_quotes.map(quote => html`
+        ${this.insights.key_lessons.map(item => html`
           <div class="quote-item">
-            <div class="quote-question"><strong>Q:</strong> ${quote.user}</div>
-            <div class="quote-answer">${quote.assistant}</div>
-            ${quote.note ? html`<div class="quote-note">${quote.note}</div>` : ''}
+            <div class="quote-answer">${item.lesson}</div>
+            ${item.importance ? html`<div class="quote-note">${item.importance}</div>` : ''}
           </div>
         `)}
       </div>
@@ -376,7 +388,7 @@ export class ConceptsTab extends LitElement {
       (this.insights.empirical_findings && this.insights.empirical_findings.length > 0) ||
       (this.insights.questions_raised && this.insights.questions_raised.length > 0) ||
       (this.insights.applications && this.insights.applications.length > 0) ||
-      (this.insights.key_quotes && this.insights.key_quotes.length > 0);
+      (this.insights.key_lessons && this.insights.key_lessons.length > 0);
 
     if (!hasInsights) {
       return html`
@@ -419,7 +431,7 @@ export class ConceptsTab extends LitElement {
         ${this.renderSection('Key Findings', '📊', this.insights.empirical_findings)}
         ${this.renderSection('Questions Raised', '❓', this.insights.questions_raised)}
         ${this.renderSection('Applications', '🚀', this.insights.applications)}
-        ${this.renderQuotes()}
+        ${this.renderLessons()}
 
         <div class="reextract-container">
           <button class="reextract-btn" @click=${this.forceExtract}>
