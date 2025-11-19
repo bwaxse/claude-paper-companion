@@ -343,6 +343,94 @@ Paper content:
 
         return response_text, usage_stats
 
+    async def extract_structured(
+        self,
+        extraction_prompt: str,
+        pdf_text: str,
+        conversation_context: str = "",
+        max_tokens: int = 4000,
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Extract structured data (JSON) from paper and conversation.
+
+        Unlike query(), this method:
+        - Uses higher token limits for complete JSON responses
+        - Does not include brevity constraints
+        - Is optimized for data extraction tasks
+
+        Args:
+            extraction_prompt: Prompt describing what to extract
+            pdf_text: Full PDF text content
+            conversation_context: Formatted conversation history for context
+            max_tokens: Maximum tokens in response (default 4000 for JSON)
+
+        Returns:
+            Tuple of (response_text, usage_dict)
+        """
+        # In dev mode, always use haiku for cost savings
+        if USE_DEV_MODE:
+            model = MODELS["haiku"]
+        else:
+            model = MODELS["haiku"]  # Use Haiku for extraction (cost efficiency)
+
+        logger.info(f"Extracting structured data with {model}")
+
+        # Build messages - NO brevity constraints for extraction
+        messages = []
+
+        # System context focused on accurate extraction
+        system_content = """You are analyzing a research paper and extracting structured insights.
+
+Your task is to extract information and return it as valid JSON.
+Be thorough and complete - include all relevant information.
+Focus on accuracy and completeness over brevity."""
+
+        # Add paper content if provided
+        if pdf_text:
+            system_content += f"\n\nPaper content:\n{pdf_text[:100000]}"
+
+        # Add conversation context if provided
+        if conversation_context:
+            system_content += f"\n\nConversation context:\n{conversation_context}"
+
+        messages.append({
+            "role": "user",
+            "content": system_content
+        })
+
+        # Add extraction prompt
+        messages.append({
+            "role": "user",
+            "content": extraction_prompt
+        })
+
+        # Make API call with retry logic
+        response = await self._retry_with_backoff(
+            self.client.messages.create,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=0.3,  # Lower temperature for structured output
+            messages=messages,
+        )
+
+        # Track token usage
+        self.token_usage.add_usage(response.usage)
+
+        # Extract response text
+        response_text = response.content[0].text if response.content else ""
+
+        # Build usage stats
+        usage_stats = {
+            "model": model,
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+            "cost": self._calculate_call_cost(response.usage, model),
+        }
+
+        logger.info(f"Extraction complete. Tokens: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
+
+        return response_text, usage_stats
+
     def _calculate_call_cost(self, usage: Any, model: str) -> float:
         """
         Calculate cost for a single API call.
