@@ -3,12 +3,36 @@ Session management service for Paper Companion.
 Handles session creation, retrieval, and lifecycle management.
 """
 
+import re
 import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import tempfile
 import shutil
+
+
+def parse_title_from_analysis(analysis: str) -> tuple[str, str]:
+    """
+    Parse paper title from Claude's initial analysis response.
+
+    The analysis starts with "TITLE: [paper title]" followed by bullet points.
+
+    Args:
+        analysis: The full analysis text from Claude
+
+    Returns:
+        Tuple of (title, analysis_without_title_line)
+        If no title found, returns (None, original_analysis)
+    """
+    # Match "TITLE: ..." at the start of the response
+    match = re.match(r'^TITLE:\s*(.+?)(?:\n|$)', analysis, re.IGNORECASE)
+    if match:
+        title = match.group(1).strip()
+        # Remove the title line from the analysis for display
+        analysis_body = analysis[match.end():].strip()
+        return title, analysis_body
+    return None, analysis
 
 from fastapi import UploadFile
 
@@ -102,6 +126,12 @@ class SessionManager:
                 pdf_text=full_text
             )
 
+            # Parse title from Claude's analysis
+            claude_title, analysis_body = parse_title_from_analysis(initial_analysis)
+
+            # Use Claude-extracted title if no PDF metadata title
+            final_title = metadata.get('title') or claude_title
+
             # Save PDF to permanent location if requested
             if save_pdf:
                 pdf_dir = Path("data/pdfs")
@@ -130,14 +160,14 @@ class SessionManager:
                     (session_id, 0, "assistant", initial_analysis, usage_stats['model'], now)
                 )
 
-                # Store PDF metadata if available
-                if metadata.get('title') or metadata.get('author'):
+                # Store metadata (title from PDF or Claude, authors from PDF)
+                if final_title or metadata.get('author'):
                     await db.execute(
                         """
                         INSERT INTO metadata (session_id, title, authors)
                         VALUES (?, ?, ?)
                         """,
-                        (session_id, metadata.get('title'), metadata.get('author'))
+                        (session_id, final_title, metadata.get('author'))
                     )
 
             # Return session response

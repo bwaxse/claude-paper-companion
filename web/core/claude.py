@@ -191,15 +191,22 @@ class ClaudeClient:
 
         Returns:
             Tuple of (analysis_text, usage_dict)
+            The analysis_text starts with "TITLE: <paper title>" on the first line
         """
         logger.info(f"Starting initial analysis with Haiku (text length: {len(pdf_text)} chars)")
 
         # Build prompt
         prompt = f"""You are a prominent senior scientist reviewing this paper. Be direct and intellectually honest.
 
-Please provide a CONCISE 5-bullet summary of this paper's most important aspects according to your review (i.e. not just according to their text).
+First, identify the paper's title. Then provide a CONCISE 5-bullet summary.
 
-Format each bullet as:
+Format your response EXACTLY as:
+TITLE: [The exact paper title]
+
+- [ASPECT]: One clear, specific sentence
+- [ASPECT]: One clear, specific sentence
+- [ASPECT]: One clear, specific sentence
+- [ASPECT]: One clear, specific sentence
 - [ASPECT]: One clear, specific sentence
 
 Focus on what matters most:
