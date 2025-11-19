@@ -119,14 +119,25 @@ class InsightExtractor:
             )
             highlights_data = await highlights.fetchall()
 
-            # Get the PDF text and initial analysis for context
+            # Get the PDF text for context
             pdf_text_result = await conn.execute(
-                "SELECT full_text, initial_analysis FROM sessions WHERE id = ?",
+                "SELECT full_text FROM sessions WHERE id = ?",
                 (session_id,)
             )
             pdf_text_row = await pdf_text_result.fetchone()
             pdf_text = pdf_text_row[0] if pdf_text_row else ""
-            initial_analysis = pdf_text_row[1] if pdf_text_row and len(pdf_text_row) > 1 else ""
+
+            # Get initial analysis from conversations (exchange_id = 0, role = 'assistant')
+            initial_result = await conn.execute(
+                """
+                SELECT content FROM conversations
+                WHERE session_id = ? AND exchange_id = 0 AND role = 'assistant'
+                LIMIT 1
+                """,
+                (session_id,)
+            )
+            initial_row = await initial_result.fetchone()
+            initial_analysis = initial_row[0] if initial_row else ""
 
         # Prepare conversation summary (include initial analysis)
         conv_summary = self._format_conversation(exchanges_data, initial_analysis)
