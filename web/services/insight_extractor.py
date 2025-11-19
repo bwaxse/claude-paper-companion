@@ -82,12 +82,12 @@ class InsightExtractor:
             if not session_row:
                 raise ValueError(f"Session not found: {session_id}")
 
-            # Get all exchanges (conversation history)
+            # Get all exchanges (conversation history) excluding initial analysis
             exchanges = await conn.execute(
                 """
                 SELECT id, role, content, model, timestamp as created_at
                 FROM conversations
-                WHERE session_id = ?
+                WHERE session_id = ? AND exchange_id > 0
                 ORDER BY timestamp ASC
                 """,
                 (session_id,)
@@ -230,17 +230,15 @@ Provide ONLY the JSON object, no additional text.
         return insights
 
     def _format_conversation(self, exchanges: List, initial_analysis: str = "") -> str:
-        """Format exchanges as conversation summary."""
+        """Format exchanges as conversation summary.
+
+        Note: initial_analysis parameter is kept for backwards compatibility
+        but is no longer included here since it's already in INITIAL PAPER SUMMARY.
+        """
         conversation = []
 
-        # Include initial analysis as the first exchange
-        if initial_analysis:
-            conversation.append(
-                f"User: Please provide an initial analysis of this paper.\n"
-                f"Assistant: {initial_analysis[:1500]}..."  # Truncate but keep more of the summary
-            )
-
         # Group exchanges by pairs (user, assistant)
+        # Only include actual user Q&A, not the initial analysis
         for i in range(0, len(exchanges) - 1, 2):
             if i + 1 < len(exchanges):
                 user_msg = dict(exchanges[i])

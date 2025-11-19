@@ -260,18 +260,25 @@ export class AskTab extends LitElement {
     let paperTitle = '';
     let content = initialAnalysis.content;
 
-    // Check if content starts with a markdown header
-    const headerMatch = content.match(/^#\s*(.+?)[\r\n]/);
-    if (headerMatch) {
-      const fullTitle = headerMatch[1].trim();
-      // Extract paper title from formats like "Review Summary: Paper Title" or "Critical Review: Paper Title"
-      const titleMatch = fullTitle.match(/^(?:Review Summary|Critical Review|5-Bullet Summary):\s*(.+)$/i);
-      if (titleMatch) {
-        paperTitle = titleMatch[1].trim();
-      } else {
-        paperTitle = fullTitle;
+    // Check for "TITLE: ..." format at start
+    const titleMatch = content.match(/^TITLE:\s*(.+?)(?:\n|$)/i);
+    if (titleMatch) {
+      paperTitle = titleMatch[1].trim();
+      content = content.substring(titleMatch[0].length).trim();
+    } else {
+      // Fallback: check for markdown header format
+      const headerMatch = content.match(/^#\s*(.+?)[\r\n]/);
+      if (headerMatch) {
+        const fullTitle = headerMatch[1].trim();
+        // Extract paper title from formats like "Review Summary: Paper Title"
+        const subtitleMatch = fullTitle.match(/^(?:Review Summary|Critical Review|5-Bullet Summary):\s*(.+)$/i);
+        if (subtitleMatch) {
+          paperTitle = subtitleMatch[1].trim();
+        } else {
+          paperTitle = fullTitle;
+        }
+        content = content.substring(headerMatch[0].length).trim();
       }
-      content = content.substring(headerMatch[0].length).trim();
     }
 
     // Parse content to make section headers bold
