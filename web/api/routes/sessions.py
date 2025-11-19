@@ -285,7 +285,7 @@ async def get_session_pdf(session_id: str):
         # Get session from database to retrieve pdf_path
         db = get_db_manager()
         session_row = await db.execute_one(
-            "SELECT session_id, filename, pdf_path FROM sessions WHERE session_id = ?",
+            "SELECT id, filename, pdf_path FROM sessions WHERE id = ?",
             (session_id,)
         )
 
@@ -358,7 +358,7 @@ async def get_session_outline(session_id: str):
         # Get session from database to retrieve pdf_path
         db = get_db_manager()
         session_row = await db.execute_one(
-            "SELECT session_id, pdf_path FROM sessions WHERE session_id = ?",
+            "SELECT id, pdf_path FROM sessions WHERE id = ?",
             (session_id,)
         )
 
