@@ -96,8 +96,11 @@ class ApiClient {
   /**
    * Get extracted key concepts from the document
    */
-  async getConcepts(sessionId: string): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/sessions/${sessionId}/concepts`);
+  async getConcepts(sessionId: string, force: boolean = false): Promise<any> {
+    const url = force
+      ? `${this.baseUrl}/sessions/${sessionId}/concepts?force=true`
+      : `${this.baseUrl}/sessions/${sessionId}/concepts`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       if (response.status === 404) {

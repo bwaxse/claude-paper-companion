@@ -2,6 +2,7 @@
 FastAPI routes for session management.
 """
 
+import json
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
@@ -399,12 +400,13 @@ async def get_session_outline(session_id: str):
 
 
 @router.get("/{session_id}/concepts")
-async def get_session_concepts(session_id: str):
+async def get_session_concepts(session_id: str, force: bool = False):
     """
     Get key concepts and insights from the conversation.
 
     **Args:**
     - session_id: Session identifier
+    - force: If true, re-extract even if no new exchanges
 
     **Returns:**
     - Structured insights including:
@@ -415,6 +417,7 @@ async def get_session_concepts(session_id: str):
       - empirical_findings: Key results discussed
       - key_quotes: Most insightful exchanges
       - And more thematic categories
+      - _cache_info: Contains no_new_exchanges flag if applicable
 
     **Raises:**
     - 404: If session not found
@@ -433,9 +436,54 @@ async def get_session_concepts(session_id: str):
                 detail=f"Session not found: {session_id}"
             )
 
-        # Extract insights using InsightExtractor
-        extractor = get_insight_extractor()
-        insights = await extractor.extract_insights(session_id)
+        db = get_db_manager()
+        async with db.get_connection() as conn:
+            # Get current exchange count
+            result = await conn.execute(
+                "SELECT COUNT(*) FROM conversations WHERE session_id = ? AND role = 'user'",
+                (session_id,)
+            )
+            row = await result.fetchone()
+            current_exchange_count = row[0] if row else 0
+
+            # Check for cached insights
+            cached = await conn.execute(
+                "SELECT insights_json, exchange_count FROM insights WHERE session_id = ?",
+                (session_id,)
+            )
+            cached_row = await cached.fetchone()
+
+            if cached_row and not force:
+                cached_insights = json.loads(cached_row[0])
+                cached_exchange_count = cached_row[1]
+
+                # If no new exchanges, return cached with warning
+                if current_exchange_count <= cached_exchange_count:
+                    cached_insights["_cache_info"] = {
+                        "no_new_exchanges": True,
+                        "cached_at": cached_insights.get("metadata", {}).get("extracted_at"),
+                        "exchange_count": cached_exchange_count
+                    }
+                    return cached_insights
+
+            # Extract fresh insights
+            extractor = get_insight_extractor()
+            insights = await extractor.extract_insights(session_id)
+
+            # Save to database
+            insights_json = json.dumps(insights)
+            await conn.execute(
+                """
+                INSERT INTO insights (session_id, insights_json, exchange_count)
+                VALUES (?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    insights_json = excluded.insights_json,
+                    exchange_count = excluded.exchange_count,
+                    extracted_at = CURRENT_TIMESTAMP
+                """,
+                (session_id, insights_json, current_exchange_count)
+            )
+            await conn.commit()
 
         return insights
 
