@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS metadata (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- Insights table: cached extracted insights from conversations
+CREATE TABLE IF NOT EXISTS insights (
+    session_id TEXT PRIMARY KEY,
+    insights_json TEXT NOT NULL,  -- Full JSON blob of extracted insights
+    exchange_count INTEGER NOT NULL,  -- Number of exchanges when extracted
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
 -- Indexes for query performance
 CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_exchange ON conversations(session_id, exchange_id);
