@@ -400,13 +400,14 @@ async def get_session_outline(session_id: str):
 
 
 @router.get("/{session_id}/concepts")
-async def get_session_concepts(session_id: str, force: bool = False):
+async def get_session_concepts(session_id: str, force: bool = False, cache_only: bool = False):
     """
     Get key concepts and insights from the conversation.
 
     **Args:**
     - session_id: Session identifier
     - force: If true, re-extract even if no new exchanges
+    - cache_only: If true, only return cached insights (don't extract if not cached)
 
     **Returns:**
     - Structured insights including:
@@ -465,6 +466,14 @@ async def get_session_concepts(session_id: str, force: bool = False):
                         "exchange_count": cached_exchange_count
                     }
                     return cached_insights
+
+                # If cache_only, return cached even if there are new exchanges
+                if cache_only:
+                    return cached_insights
+
+            # If cache_only and no cache, return null
+            if cache_only:
+                return None
 
             # Extract fresh insights
             extractor = get_insight_extractor()

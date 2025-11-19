@@ -182,8 +182,8 @@ Please provide a JSON object with:
    - critiques: Specific critical points made (beyond general weaknesses)
    - surprising_elements: Unexpected findings or approaches noted
 
-3. KEY_QUOTES: The 3-5 most insightful exchanges from our conversation
-   Each as: {{"user": "question", "assistant": "answer", "theme": "category", "note": "why important"}}
+3. KEY_LESSONS: The 3-5 most important lessons or takeaways from our discussion (NOT verbatim quotes)
+   Each as: {{"lesson": "synthesized insight in 1-2 sentences", "theme": "category", "importance": "why this matters"}}
 
 4. CUSTOM_THEMES: Any recurring themes specific to our discussion that don't fit above
    (e.g., if we spent a lot of time on "reproducibility" or "ethical implications")

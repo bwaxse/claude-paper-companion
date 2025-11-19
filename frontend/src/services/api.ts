@@ -96,9 +96,13 @@ class ApiClient {
   /**
    * Get extracted key concepts from the document
    */
-  async getConcepts(sessionId: string, force: boolean = false): Promise<any> {
-    const url = force
-      ? `${this.baseUrl}/sessions/${sessionId}/concepts?force=true`
+  async getConcepts(sessionId: string, force: boolean = false, cacheOnly: boolean = false): Promise<any> {
+    const params = new URLSearchParams();
+    if (force) params.append('force', 'true');
+    if (cacheOnly) params.append('cache_only', 'true');
+
+    const url = params.toString()
+      ? `${this.baseUrl}/sessions/${sessionId}/concepts?${params}`
       : `${this.baseUrl}/sessions/${sessionId}/concepts`;
     const response = await fetch(url);
 
