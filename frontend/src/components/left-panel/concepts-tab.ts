@@ -235,6 +235,27 @@ export class ConceptsTab extends LitElement {
     .cache-warning-btn:hover {
       background: #d97706;
     }
+
+    .reextract-container {
+      padding: 16px 0;
+      border-top: 1px solid #e0e0e0;
+      margin-top: 16px;
+      text-align: center;
+    }
+
+    .reextract-btn {
+      padding: 8px 16px;
+      background: #f0f0f0;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .reextract-btn:hover {
+      background: #e0e0e0;
+    }
   `;
 
   updated(changedProperties: Map<string, unknown>) {
@@ -399,6 +420,12 @@ export class ConceptsTab extends LitElement {
         ${this.renderSection('Questions Raised', '❓', this.insights.questions_raised)}
         ${this.renderSection('Applications', '🚀', this.insights.applications)}
         ${this.renderQuotes()}
+
+        <div class="reextract-container">
+          <button class="reextract-btn" @click=${this.forceExtract}>
+            Re-extract Insights
+          </button>
+        </div>
       </div>
     `;
   }
