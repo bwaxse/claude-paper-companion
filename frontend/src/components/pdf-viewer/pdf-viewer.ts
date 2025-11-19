@@ -216,15 +216,23 @@ export class PdfViewer extends LitElement {
   }
 
   async renderPage(pageNum: number) {
-    if (!this.pdf || this.renderingPages.has(pageNum)) {
+    if (!this.pdf) {
       return;
     }
 
-    // Cancel any existing render task for this page
+    // Cancel any existing render task for this page and wait for it
     const existingTask = this.renderTasks.get(pageNum);
     if (existingTask) {
       existingTask.cancel();
       this.renderTasks.delete(pageNum);
+      this.renderingPages.delete(pageNum);
+      // Give time for cancellation to complete
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    // Check again after awaiting - another render may have started
+    if (this.renderingPages.has(pageNum)) {
+      return;
     }
 
     this.renderingPages.add(pageNum);
