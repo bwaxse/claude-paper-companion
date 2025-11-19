@@ -119,16 +119,17 @@ class InsightExtractor:
             )
             highlights_data = await highlights.fetchall()
 
-            # Get the PDF text for context
+            # Get the PDF text and initial analysis for context
             pdf_text_result = await conn.execute(
-                "SELECT full_text FROM sessions WHERE id = ?",
+                "SELECT full_text, initial_analysis FROM sessions WHERE id = ?",
                 (session_id,)
             )
             pdf_text_row = await pdf_text_result.fetchone()
             pdf_text = pdf_text_row[0] if pdf_text_row else ""
+            initial_analysis = pdf_text_row[1] if pdf_text_row and len(pdf_text_row) > 1 else ""
 
-        # Prepare conversation summary
-        conv_summary = self._format_conversation(exchanges_data)
+        # Prepare conversation summary (include initial analysis)
+        conv_summary = self._format_conversation(exchanges_data, initial_analysis)
         flagged_summary = self._format_flagged_exchanges(exchanges_data, flagged_data)
         highlights_summary = self._format_highlights(highlights_data)
 
@@ -211,9 +212,16 @@ Provide ONLY the JSON object, no additional text.
 
         return insights
 
-    def _format_conversation(self, exchanges: List) -> str:
+    def _format_conversation(self, exchanges: List, initial_analysis: str = "") -> str:
         """Format exchanges as conversation summary."""
         conversation = []
+
+        # Include initial analysis as the first exchange
+        if initial_analysis:
+            conversation.append(
+                f"User: Please provide an initial analysis of this paper.\n"
+                f"Assistant: {initial_analysis[:1500]}..."  # Truncate but keep more of the summary
+            )
 
         # Group exchanges by pairs (user, assistant)
         for i in range(0, len(exchanges) - 1, 2):
