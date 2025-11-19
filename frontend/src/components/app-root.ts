@@ -7,10 +7,12 @@ import type { TextSelection } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
 import './left-panel/left-panel';
 import './session-picker/session-list';
+import './zotero-picker/zotero-picker';
 import './shared/loading-spinner';
 import './shared/error-message';
 import type { PdfViewer } from './pdf-viewer/pdf-viewer';
 import type { LeftPanel } from './left-panel/left-panel';
+import type { ZoteroItem } from '../types/session';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -24,6 +26,7 @@ export class AppRoot extends LitElement {
   @state() private loading = false;
   @state() private error = '';
   @state() private showSessionPicker = false;
+  @state() private showZoteroPicker = false;
 
   @query('pdf-viewer') private pdfViewer?: PdfViewer;
   @query('left-panel') private leftPanel?: LeftPanel;
@@ -70,10 +73,12 @@ export class AppRoot extends LitElement {
       return;
     }
 
-    // Escape - Clear text selection
+    // Escape - Close modals or clear text selection
     if (e.key === 'Escape') {
       if (this.showSessionPicker) {
         this.showSessionPicker = false;
+      } else if (this.showZoteroPicker) {
+        this.showZoteroPicker = false;
       } else if (this.selectedText) {
         this.handleClearSelection();
       }
@@ -413,20 +418,93 @@ export class AppRoot extends LitElement {
     }
   }
 
+  handleShowZoteroPicker() {
+    this.showZoteroPicker = true;
+  }
+
+  handleCloseZoteroPicker() {
+    this.showZoteroPicker = false;
+  }
+
+  async handleZoteroPaperSelected(e: CustomEvent<{ session: Session; paper: ZoteroItem }>) {
+    const { session } = e.detail;
+    this.showZoteroPicker = false;
+    this.loading = true;
+    this.error = '';
+
+    try {
+      // Load full session data
+      const fullSession = await api.getSession(session.session_id);
+
+      this.sessionId = fullSession.session_id;
+      this.filename = fullSession.filename;
+      this.flags = fullSession.flags || [];
+
+      // Build conversation with initial analysis as first messages
+      const initialMessages: ConversationMessage[] = [];
+      if (fullSession.initial_analysis) {
+        initialMessages.push({
+          id: 0,
+          role: 'user',
+          content: 'Initial analysis',
+          timestamp: fullSession.created_at
+        });
+        initialMessages.push({
+          id: 1,
+          role: 'assistant',
+          content: fullSession.initial_analysis,
+          timestamp: fullSession.created_at
+        });
+      }
+
+      // Convert conversation messages from API format to frontend format
+      const conversationMessages: ConversationMessage[] = (fullSession.conversation || []).map((msg: any) => ({
+        id: msg.exchange_id,
+        role: msg.role,
+        content: msg.content,
+        model: msg.model,
+        highlighted_text: msg.highlighted_text,
+        page: msg.page_number,
+        timestamp: msg.timestamp
+      }));
+
+      this.conversation = [...initialMessages, ...conversationMessages];
+
+      // Save to session storage
+      sessionStorage.setLastSessionId(fullSession.session_id);
+
+      // Load PDF from backend
+      this.pdfUrl = `/sessions/${fullSession.session_id}/pdf`;
+      this.loading = false;
+
+    } catch (err) {
+      console.error('Failed to load Zotero session:', err);
+      if (err instanceof ApiError) {
+        this.error = err.message;
+      } else {
+        this.error = 'Failed to load paper from Zotero';
+      }
+      this.loading = false;
+    }
+  }
+
   private renderEmptyState() {
     return html`
       <div class="empty-state">
         <h2>Paper Companion</h2>
         <p>
-          Upload a PDF to get started, or load a previous session.
+          Upload a PDF to get started, load from Zotero, or continue a previous session.
         </p>
         <div class="empty-state-actions">
           <label class="upload-btn">
             Upload PDF
             <input type="file" accept=".pdf" @change=${this.handleFileUpload} />
           </label>
+          <button class="secondary-btn" @click=${this.handleShowZoteroPicker}>
+            Load from Zotero
+          </button>
           <button class="secondary-btn" @click=${this.handleShowSessionPicker}>
-            Load Previous Session
+            Previous Sessions
           </button>
         </div>
       </div>
@@ -496,6 +574,12 @@ export class AppRoot extends LitElement {
         @close=${this.handleCloseSessionPicker}
         @upload-new=${this.handleUploadNewFromPicker}
       ></session-list>
+
+      <zotero-picker
+        .visible=${this.showZoteroPicker}
+        @zotero-paper-selected=${this.handleZoteroPaperSelected}
+        @close=${this.handleCloseZoteroPicker}
+      ></zotero-picker>
     `;
   }
 }
