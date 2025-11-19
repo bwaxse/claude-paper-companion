@@ -230,35 +230,20 @@ export class ConversationItem extends LitElement {
     const hasMultipleLines = lines.length > 1 || content.length > 100;
 
     if (!hasMultipleLines || this.expanded) {
-      return html`
-        <span class="user-query user-query-full" @click=${this.toggleExpand}>
-          ${content}
-        </span>
-        ${hasMultipleLines
-          ? html`
-              <div class="expand-indicator" @click=${this.toggleExpand}>
-                Click to collapse
-              </div>
-            `
-          : ''}
-      `;
+      // Simple inline display for short questions
+      if (!hasMultipleLines) {
+        return html`<span class="user-query">${content}</span>`;
+      }
+      // Expanded view for long questions
+      return html`<span class="user-query user-query-full" @click=${this.toggleExpand}>${content}</span>
+        <div class="expand-indicator" @click=${this.toggleExpand}>Click to collapse</div>`;
     }
 
-    // Show preview with first line and faded second line
-    const firstLine = lines[0];
-    const rest = lines.length > 1 ? lines[1] : content.substring(firstLine.length);
+    // Show preview with first line truncated
+    const firstLine = lines[0].length > 80 ? lines[0].substring(0, 80) + '...' : lines[0];
 
-    return html`
-      <span class="user-query user-query-preview" @click=${this.toggleExpand}>
-        <span class="user-query-first-line">${firstLine}</span>
-        ${rest
-          ? html`<span class="user-query-rest">${rest}</span>`
-          : ''}
-      </span>
-      <div class="expand-indicator" @click=${this.toggleExpand}>
-        Click to expand
-      </div>
-    `;
+    return html`<span class="user-query user-query-preview" @click=${this.toggleExpand}>${firstLine}...</span>
+      <div class="expand-indicator" @click=${this.toggleExpand}>Click to expand</div>`;
   }
 
   render() {
@@ -276,9 +261,7 @@ export class ConversationItem extends LitElement {
                 </div>
               `
             : ''}
-          <div class="question-row">
-            <span class="question-label">Question: </span>${this.renderUserQuery()}
-          </div>
+          <div class="question-row"><span class="question-label">Question: </span>${this.renderUserQuery()}</div>
           ${this.userMessage.page
             ? html`
                 <div class="page-indicator">Page ${this.userMessage.page}</div>
