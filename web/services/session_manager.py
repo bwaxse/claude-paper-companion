@@ -273,12 +273,13 @@ class SessionManager:
             SessionDetail with full conversation, or None if not found
         """
         async with self.db.get_connection() as db:
-            # Get session info
+            # Get session info with metadata title
             cursor = await db.execute(
                 """
-                SELECT id, filename, zotero_key, pdf_path, created_at, updated_at
-                FROM sessions
-                WHERE id = ?
+                SELECT s.id, s.filename, s.zotero_key, s.pdf_path, s.created_at, s.updated_at, m.title
+                FROM sessions s
+                LEFT JOIN metadata m ON s.id = m.session_id
+                WHERE s.id = ?
                 """,
                 (session_id,)
             )
@@ -286,6 +287,9 @@ class SessionManager:
 
             if not session_row:
                 return None
+
+            # Use title from metadata if available, otherwise use filename
+            display_name = session_row[6] if session_row[6] else session_row[1]
 
             # Get conversation history
             cursor = await db.execute(
@@ -323,7 +327,7 @@ class SessionManager:
 
             return SessionDetail(
                 session_id=session_row[0],
-                filename=session_row[1],
+                filename=display_name,  # Use title from metadata if available
                 initial_analysis=initial_analysis,
                 created_at=datetime.fromisoformat(session_row[4]) if session_row[4] else datetime.utcnow(),
                 updated_at=datetime.fromisoformat(session_row[5]) if session_row[5] else datetime.utcnow(),
