@@ -119,6 +119,14 @@ class InsightExtractor:
             )
             highlights_data = await highlights.fetchall()
 
+            # Get the PDF text for context
+            pdf_text_result = await conn.execute(
+                "SELECT full_text FROM sessions WHERE id = ?",
+                (session_id,)
+            )
+            pdf_text_row = await pdf_text_result.fetchone()
+            pdf_text = pdf_text_row[0] if pdf_text_row else ""
+
         # Prepare conversation summary
         conv_summary = self._format_conversation(exchanges_data)
         flagged_summary = self._format_flagged_exchanges(exchanges_data, flagged_data)
@@ -176,13 +184,15 @@ Provide ONLY the JSON object, no additional text.
 """
 
         # Call Claude to extract insights
-        response = await self.claude.query(
-            messages=[{"role": "user", "content": extraction_prompt}],
+        response_text, usage = await self.claude.query(
+            user_query=extraction_prompt,
+            pdf_text=pdf_text,
+            conversation_history=[],
             use_sonnet=False  # Use Haiku for cost efficiency
         )
 
         # Parse JSON from response
-        insights = self._parse_insights_json(response["content"])
+        insights = self._parse_insights_json(response_text)
 
         # Add metadata
         insights["metadata"] = {
