@@ -309,6 +309,32 @@ export class ConceptsTab extends LitElement {
       `;
     }
 
+    // Check if there are any insights to show
+    const hasInsights =
+      (this.insights.strengths && this.insights.strengths.length > 0) ||
+      (this.insights.weaknesses && this.insights.weaknesses.length > 0) ||
+      (this.insights.methodological_notes && this.insights.methodological_notes.length > 0) ||
+      (this.insights.theoretical_contributions && this.insights.theoretical_contributions.length > 0) ||
+      (this.insights.empirical_findings && this.insights.empirical_findings.length > 0) ||
+      (this.insights.questions_raised && this.insights.questions_raised.length > 0) ||
+      (this.insights.applications && this.insights.applications.length > 0) ||
+      (this.insights.key_quotes && this.insights.key_quotes.length > 0);
+
+    if (!hasInsights) {
+      return html`
+        <div class="empty-state">
+          <h3>No insights extracted</h3>
+          <p>
+            Ask some questions about the paper first, then extract insights
+            from your conversation. The more you discuss, the richer the insights.
+          </p>
+          <button class="extract-btn" @click=${this.extractInsights}>
+            Try Again
+          </button>
+        </div>
+      `;
+    }
+
     // Render extracted insights
     return html`
       <div class="insights-container">
