@@ -3,7 +3,7 @@ import { customElement, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../services/api';
 import { sessionStorage } from '../services/session-storage';
 import type { ConversationMessage, Session } from '../types/session';
-import type { TextSelection, OutlineItem, Concept } from '../types/pdf';
+import type { TextSelection, Concept } from '../types/pdf';
 import './pdf-viewer/pdf-viewer';
 import './left-panel/left-panel';
 import './session-picker/session-list';
@@ -19,7 +19,6 @@ export class AppRoot extends LitElement {
   @state() private pdfUrl = '';
   @state() private conversation: ConversationMessage[] = [];
   @state() private flags: number[] = [];
-  @state() private outline: OutlineItem[] = [];
   @state() private concepts: Concept[] = [];
   @state() private selectedText = '';
   @state() private selectedPage?: number;
@@ -86,15 +85,10 @@ export class AppRoot extends LitElement {
     if (!isTyping && !modifier && !e.shiftKey && !e.altKey) {
       if (e.key === '1') {
         e.preventDefault();
-        this.switchTab('outline');
-        return;
-      }
-      if (e.key === '2') {
-        e.preventDefault();
         this.switchTab('concepts');
         return;
       }
-      if (e.key === '3') {
+      if (e.key === '2') {
         e.preventDefault();
         this.switchTab('ask');
         return;
@@ -144,7 +138,7 @@ export class AppRoot extends LitElement {
     }
   }
 
-  private switchTab(tab: 'outline' | 'concepts' | 'ask') {
+  private switchTab(tab: 'concepts' | 'ask') {
     if (this.leftPanel) {
       // Access the activeTab property directly
       (this.leftPanel as any).activeTab = tab;
@@ -481,7 +475,6 @@ export class AppRoot extends LitElement {
           .filename=${this.filename}
           .conversation=${this.conversation}
           .flags=${this.flags}
-          .outline=${this.outline}
           .concepts=${this.concepts}
           .selectedText=${this.selectedText}
           .selectedPage=${this.selectedPage}
