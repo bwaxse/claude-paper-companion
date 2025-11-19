@@ -127,7 +127,9 @@ class ApiClient {
       );
     }
 
-    return response.json();
+    const data = await response.json();
+    // Backend returns {sessions: [...], total: n}, extract just the sessions array
+    return data.sessions || [];
   }
 
   /**
