@@ -42,10 +42,12 @@ class ApiClient {
    * Create a new session from a Zotero paper
    */
   async createSessionFromZotero(zoteroKey: string): Promise<Session> {
+    const formData = new FormData();
+    formData.append('zotero_key', zoteroKey);
+
     const response = await fetch(`${this.baseUrl}/sessions/new`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zotero_key: zoteroKey })
+      body: formData
     });
 
     if (!response.ok) {
@@ -262,6 +264,70 @@ class ApiClient {
     if (!response.ok) {
       throw new ApiError(
         `Failed to get recent papers: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get attachment files linked to a Zotero paper
+   */
+  async getPaperAttachments(zoteroKey: string): Promise<ZoteroItem[]> {
+    const response = await fetch(
+      `${this.baseUrl}/zotero/attachments/${zoteroKey}`
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        `Failed to get attachments: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Load supplement paper text for reference in conversation
+   */
+  async loadSupplement(sessionId: string, zoteroKey: string): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/zotero/load-supplement?session_id=${sessionId}&zotero_key=${zoteroKey}`,
+      { method: 'POST' }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        `Failed to load supplement: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Upload a supplemental PDF to Zotero
+   */
+  async uploadSupplement(sessionId: string, zoteroKey: string, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('session_id', sessionId);
+    formData.append('zotero_key', zoteroKey);
+    formData.append('file', file);
+
+    const response = await fetch(
+      `${this.baseUrl}/zotero/upload-supplement`,
+      {
+        method: 'POST',
+        body: formData
+      }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        `Failed to upload supplement: ${response.statusText}`,
         response.status
       );
     }

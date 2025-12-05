@@ -2,8 +2,11 @@
 FastAPI routes for Zotero integration.
 """
 
+import asyncio
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from pathlib import Path
+import tempfile
+from fastapi import APIRouter, HTTPException, Query, status, UploadFile, File, Form
 
 from ..models.zotero import (
     ZoteroSearchResponse,
@@ -278,6 +281,171 @@ async def save_insights_to_zotero(request: ZoteroNoteRequest):
         )
 
 
+@router.get("/attachments/{key}", response_model=List[ZoteroItemSummary])
+async def get_paper_attachments(key: str):
+    """
+    Get all attachment files linked to a Zotero paper.
+
+    **Purpose:**
+    - Show supplemental PDFs/files for a paper
+    - User can select one to load as supplement
+
+    **Args:**
+    - key: Zotero item key of the parent paper
+
+    **Returns:**
+    - List of ZoteroItemSummary objects (attachment items only)
+
+    **Raises:**
+    - 404: If paper not found
+    - 500: If Zotero not configured or fetch fails
+
+    **Example:**
+    ```
+    GET /zotero/attachments/ABC123XY
+    ```
+    """
+    try:
+        service = get_zotero_service()
+
+        if not service.is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Zotero is not configured"
+            )
+
+        # Get the parent item to verify it exists
+        parent = await service.get_paper_by_key(key)
+        if not parent:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Paper '{key}' not found in Zotero"
+            )
+
+        # Get attachments for this paper (excluding the main PDF)
+        # pyzotero returns children items which include attachments
+        try:
+            attachments = []
+            # Access the zotero client directly to get children
+            zot = service.zot
+            if zot:
+                children = await asyncio.to_thread(zot.children, key)
+
+                # Filter for PDF attachments only
+                pdf_attachments = [
+                    child for child in children
+                    if child.get('data', {}).get('contentType') == 'application/pdf'
+                ]
+
+                # Identify the main PDF (same logic as get_pdf_path)
+                # Main PDF is either titled "Full Text PDF" or the first PDF
+                main_pdf_key = None
+                if pdf_attachments:
+                    main_pdf = next(
+                        (att for att in pdf_attachments if att['data'].get('title') == 'Full Text PDF'),
+                        pdf_attachments[0]
+                    )
+                    main_pdf_key = main_pdf.get('key')
+
+                # Return only supplemental PDFs (exclude the main PDF)
+                for child in pdf_attachments:
+                    if child.get('key') != main_pdf_key:
+                        summary = service._item_to_summary(child)
+                        if summary:
+                            attachments.append(summary)
+
+            return attachments
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get attachments: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get attachments: {str(e)}"
+        )
+
+
+@router.post("/load-supplement", response_model=dict)
+async def load_supplement(
+    session_id: str = Query(..., description="Session ID to load supplement into"),
+    zotero_key: str = Query(..., description="Zotero key of supplement paper")
+):
+    """
+    Load a supplement paper's text into a session for Claude reference.
+
+    **Purpose:**
+    - User can add related papers during conversation
+    - Text gets added to conversation history
+    - Claude can reference supplement without displaying it
+
+    **Args:**
+    - session_id: Session ID to add supplement to
+    - zotero_key: Zotero item key of the supplement
+
+    **Returns:**
+    - dict with supplement_text and metadata
+
+    **Raises:**
+    - 404: If session or paper not found
+    - 500: If Zotero not configured or fetch fails
+
+    **Example:**
+    ```
+    POST /zotero/load-supplement?session_id=abc123&zotero_key=XYZ789
+    ```
+    """
+    try:
+        zotero_service = get_zotero_service()
+
+        if not zotero_service.is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Zotero is not configured"
+            )
+
+        # Get the supplement paper
+        supplement = await zotero_service.get_paper_by_key(zotero_key)
+        if not supplement:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Supplement paper '{zotero_key}' not found"
+            )
+
+        # Get PDF text if available
+        pdf_path = await zotero_service.get_pdf_path(zotero_key)
+        supplement_text = ""
+
+        if pdf_path:
+            try:
+                from ...core.pdf_processor import PDFProcessor
+                processor = PDFProcessor()
+                supplement_text = await processor.extract_text(pdf_path)
+            except Exception as e:
+                supplement_text = f"(Could not extract PDF text: {str(e)})"
+
+        return {
+            "success": True,
+            "title": supplement.title,
+            "authors": supplement.authors,
+            "year": supplement.year,
+            "supplement_text": supplement_text,
+            "has_pdf": bool(pdf_path)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load supplement: {str(e)}"
+        )
+
+
 @router.get("/related", response_model=List[ZoteroItemSummary])
 async def get_related_papers(
     tags: str = Query(..., description="Comma-separated list of tags to search for"),
@@ -342,4 +510,112 @@ async def get_related_papers(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to find related papers: {str(e)}"
+        )
+
+
+@router.post("/upload-supplement")
+async def upload_supplement(
+    session_id: str = Form(...),
+    zotero_key: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Upload a supplemental PDF and attach it to a Zotero item.
+
+    **Purpose:**
+    - Allow users to add supplemental PDFs to papers in their Zotero library
+    - Files are uploaded to Zotero as child attachments
+    - Makes supplements available for future sessions
+
+    **Args:**
+    - session_id: Current session ID (for validation)
+    - zotero_key: Zotero item key to attach supplement to
+    - file: PDF file to upload
+
+    **Returns:**
+    - dict with success status and attachment details
+
+    **Raises:**
+    - 400: If file is not a PDF
+    - 404: If Zotero item not found
+    - 500: If upload fails
+
+    **Example:**
+    ```
+    POST /zotero/upload-supplement
+    Content-Type: multipart/form-data
+    ```
+    """
+    try:
+        # Validate file type
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be a PDF"
+            )
+
+        service = get_zotero_service()
+
+        if not service.is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Zotero is not configured"
+            )
+
+        # Verify parent item exists
+        parent = await service.get_paper_by_key(zotero_key)
+        if not parent:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Zotero item '{zotero_key}' not found"
+            )
+
+        # Save file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        try:
+            # Upload to Zotero as child attachment
+            loop = asyncio.get_event_loop()
+            zot = service.zot
+
+            # Create attachment using pyzotero
+            attachment = await loop.run_in_executor(
+                None,
+                lambda: zot.attachment_simple([temp_path], zotero_key)
+            )
+
+            # Update the title to match the filename
+            if attachment and len(attachment) > 0:
+                attachment_key = attachment[0]
+                await loop.run_in_executor(
+                    None,
+                    lambda: zot.update_item({
+                        'key': attachment_key,
+                        'data': {
+                            'title': file.filename,
+                            'contentType': 'application/pdf'
+                        }
+                    })
+                )
+
+            return {
+                "status": "success",
+                "message": f"Supplement '{file.filename}' uploaded to Zotero",
+                "attachment_key": attachment[0] if attachment else None,
+                "parent_key": zotero_key
+            }
+
+        finally:
+            # Clean up temp file
+            Path(temp_path).unlink(missing_ok=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload supplement: {str(e)}"
         )

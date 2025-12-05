@@ -20,6 +20,7 @@ from ...services import (
     get_session as service_get_session,
     list_sessions as service_list_sessions,
     delete_session as service_delete_session,
+    get_zotero_service,
 )
 from ...core.pdf_processor import PDFProcessor
 from ...services.insight_extractor import get_insight_extractor
@@ -283,10 +284,10 @@ async def get_session_pdf(session_id: str):
     - Direct PDF access for multi-page rendering
     """
     try:
-        # Get session from database to retrieve pdf_path
+        # Get session from database to retrieve pdf_path and zotero_key
         db = get_db_manager()
         session_row = await db.execute_one(
-            "SELECT id, filename, pdf_path FROM sessions WHERE id = ?",
+            "SELECT id, filename, pdf_path, zotero_key FROM sessions WHERE id = ?",
             (session_id,)
         )
 
@@ -296,17 +297,40 @@ async def get_session_pdf(session_id: str):
                 detail=f"Session not found: {session_id}"
             )
 
-        # Get PDF path
-        pdf_path = dict(session_row).get("pdf_path")
-        if not pdf_path:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"PDF file path not found for session: {session_id}"
-            )
+        session_dict = dict(session_row)
+        pdf_path = session_dict.get("pdf_path")
+        zotero_key = session_dict.get("zotero_key")
 
         # Check if file exists
-        pdf_file = Path(pdf_path)
-        if not pdf_file.exists():
+        pdf_file = Path(pdf_path) if pdf_path else None
+
+        # If PDF missing and this is a Zotero session, re-download from Zotero
+        if (not pdf_path or not pdf_file or not pdf_file.exists()) and zotero_key:
+            zotero = get_zotero_service()
+            if zotero.is_configured():
+                # Re-download PDF from Zotero
+                new_pdf_path = await zotero.get_pdf_path(zotero_key)
+                if new_pdf_path:
+                    # Update database with new path
+                    await db.execute(
+                        "UPDATE sessions SET pdf_path = ? WHERE id = ?",
+                        (new_pdf_path, session_id)
+                    )
+                    pdf_path = new_pdf_path
+                    pdf_file = Path(pdf_path)
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Could not download PDF from Zotero for key: {zotero_key}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="PDF file not found and Zotero is not configured to re-download"
+                )
+
+        # Final check - if still no PDF, error
+        if not pdf_path or not pdf_file or not pdf_file.exists():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"PDF file not found at path: {pdf_path}"
@@ -316,7 +340,7 @@ async def get_session_pdf(session_id: str):
         return FileResponse(
             path=pdf_path,
             media_type="application/pdf",
-            filename=dict(session_row).get("filename", "paper.pdf")
+            filename=session_dict.get("filename", "paper.pdf")
         )
 
     except HTTPException:
@@ -325,6 +349,96 @@ async def get_session_pdf(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to serve PDF: {str(e)}"
+        )
+
+
+@router.post("/{session_id}/refresh-pdf")
+async def refresh_session_pdf(session_id: str):
+    """
+    Force re-download PDF from Zotero to get latest version with highlights.
+
+    **Args:**
+    - session_id: Session identifier
+
+    **Returns:**
+    - Success message with new PDF path
+
+    **Raises:**
+    - 404: If session not found or not a Zotero session
+    - 500: If download fails
+
+    **Use case:**
+    - Refresh PDF after adding highlights in Zotero
+    - Get updated annotations from Zotero library
+    """
+    try:
+        # Get session from database
+        db = get_db_manager()
+        session_row = await db.execute_one(
+            "SELECT id, zotero_key FROM sessions WHERE id = ?",
+            (session_id,)
+        )
+
+        if not session_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session not found: {session_id}"
+            )
+
+        session_dict = dict(session_row)
+        zotero_key = session_dict.get("zotero_key")
+
+        if not zotero_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This session is not from Zotero. Only Zotero sessions can be refreshed."
+            )
+
+        # Re-download PDF from Zotero
+        zotero = get_zotero_service()
+        if not zotero.is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Zotero is not configured"
+            )
+
+        # Delete old temp file if it exists
+        old_pdf_path = await db.execute_one(
+            "SELECT pdf_path FROM sessions WHERE id = ?",
+            (session_id,)
+        )
+        if old_pdf_path:
+            old_path = dict(old_pdf_path).get("pdf_path")
+            if old_path and Path(old_path).exists():
+                Path(old_path).unlink()
+
+        # Download fresh copy
+        new_pdf_path = await zotero.get_pdf_path(zotero_key)
+        if not new_pdf_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Could not download PDF from Zotero for key: {zotero_key}"
+            )
+
+        # Update database
+        await db.execute(
+            "UPDATE sessions SET pdf_path = ? WHERE id = ?",
+            (new_pdf_path, session_id)
+        )
+
+        return {
+            "status": "success",
+            "message": "PDF refreshed from Zotero",
+            "pdf_path": new_pdf_path,
+            "session_id": session_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh PDF: {str(e)}"
         )
 
 

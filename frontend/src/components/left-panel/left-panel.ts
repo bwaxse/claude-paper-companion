@@ -10,6 +10,7 @@ export type TabType = 'concepts' | 'ask';
 export class LeftPanel extends LitElement {
   @property({ type: String }) sessionId = '';
   @property({ type: String }) filename = '';
+  @property({ type: String }) zoteroKey?: string;  // Zotero key if session was loaded from Zotero
   @property({ type: Array }) conversation: ConversationMessage[] = [];
   @property({ type: Array }) flags: number[] = [];
   @property({ type: String }) selectedText = '';
@@ -150,6 +151,7 @@ export class LeftPanel extends LitElement {
         <ask-tab
           class="${this.activeTab === 'ask' ? 'active' : ''}"
           .sessionId=${this.sessionId}
+          .zoteroKey=${this.zoteroKey}
           .conversation=${this.conversation}
           .flags=${this.flags}
           .selectedText=${this.selectedText}
