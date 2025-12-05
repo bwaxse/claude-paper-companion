@@ -246,12 +246,13 @@ export class ConversationItem extends LitElement {
 
     // Show preview with first line truncated
     const firstLine = lines[0].length > 80 ? lines[0].substring(0, 80) + '...' : lines[0];
+    const restLines = lines.slice(1).join('\n');
 
     return html`
       <span class="user-query user-query-preview" @click=${this.toggleExpand}>
         <span class="user-query-first-line">${firstLine}</span>
-        ${rest
-          ? html`<span class="user-query-rest">${rest}</span>`
+        ${restLines
+          ? html`<span class="user-query-rest">${restLines.substring(0, 100)}...</span>`
           : ''}
       </span>
       <div class="expand-indicator" @click=${this.toggleExpand}>

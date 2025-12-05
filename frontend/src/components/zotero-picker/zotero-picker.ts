@@ -7,6 +7,8 @@ import '../shared/loading-spinner';
 @customElement('zotero-picker')
 export class ZoteroPicker extends LitElement {
   @property({ type: Boolean }) visible = false;
+  @property({ type: Array }) preFilteredItems?: ZoteroItem[]; // Pass pre-filtered items (e.g., attachments)
+  @property({ type: String }) mode: 'full' | 'supplements' = 'full'; // Mode: 'full' for all papers, 'supplements' for attachments only
 
   @state() private items: ZoteroItem[] = [];
   @state() private loading = true;
@@ -264,8 +266,15 @@ export class ZoteroPicker extends LitElement {
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    // Load recent papers when the picker becomes visible
-    if (changedProperties.has('visible') && this.visible) {
+    // If pre-filtered items provided, use those instead of loading
+    if (changedProperties.has('preFilteredItems') && this.preFilteredItems) {
+      this.items = this.preFilteredItems;
+      this.loading = false;
+      return;
+    }
+
+    // Load recent papers when the picker becomes visible (only in 'full' mode)
+    if (changedProperties.has('visible') && this.visible && this.mode === 'full') {
       this.loadRecentPapers();
     }
   }
@@ -368,6 +377,17 @@ export class ZoteroPicker extends LitElement {
   private renderPaperItem(paper: ZoteroItem) {
     const isSelecting = this.selectingKey === paper.key;
 
+    // Skip attachment items without titles - they're usually PDFs of other items
+    if (paper.item_type === 'attachment' && !paper.title) {
+      return null;
+    }
+
+    // Skip pure attachment items - show the parent paper instead
+    if (paper.item_type === 'attachment' && paper.title) {
+      // Filter to only show actual papers, not PDF attachments
+      return null;
+    }
+
     return html`
       <div
         class="paper-item ${isSelecting ? 'selecting' : ''}"
@@ -409,40 +429,42 @@ export class ZoteroPicker extends LitElement {
       }}>
         <div class="picker-content">
           <div class="picker-header">
-            <h2>Load from Zotero</h2>
+            <h2>${this.mode === 'supplements' ? 'Select Supplement' : 'Load from Zotero'}</h2>
 
-            <div class="tabs">
-              <button
-                class="tab ${this.activeTab === 'recent' ? 'active' : ''}"
-                @click=${() => this.handleTabClick('recent')}
-              >
-                Recent
-              </button>
-              <button
-                class="tab ${this.activeTab === 'search' ? 'active' : ''}"
-                @click=${() => this.handleTabClick('search')}
-              >
-                Search
-              </button>
-            </div>
+            ${this.mode === 'full' ? html`
+              <div class="tabs">
+                <button
+                  class="tab ${this.activeTab === 'recent' ? 'active' : ''}"
+                  @click=${() => this.handleTabClick('recent')}
+                >
+                  Recent
+                </button>
+                <button
+                  class="tab ${this.activeTab === 'search' ? 'active' : ''}"
+                  @click=${() => this.handleTabClick('search')}
+                >
+                  Search
+                </button>
+              </div>
 
-            <div class="search-container">
-              <input
-                type="text"
-                class="search-input"
-                placeholder="Search by title, author, or DOI..."
-                .value=${this.searchQuery}
-                @input=${this.handleSearchInput}
-                @keydown=${this.handleSearchKeydown}
-              />
-              <button
-                class="search-btn"
-                @click=${this.handleSearch}
-                ?disabled=${this.searching || !this.searchQuery.trim()}
-              >
-                ${this.searching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
+              <div class="search-container">
+                <input
+                  type="text"
+                  class="search-input"
+                  placeholder="Search by title, author, or DOI..."
+                  .value=${this.searchQuery}
+                  @input=${this.handleSearchInput}
+                  @keydown=${this.handleSearchKeydown}
+                />
+                <button
+                  class="search-btn"
+                  @click=${this.handleSearch}
+                  ?disabled=${this.searching || !this.searchQuery.trim()}
+                >
+                  ${this.searching ? 'Searching...' : 'Search'}
+                </button>
+              </div>
+            ` : ''}
           </div>
 
           <div class="picker-body">
@@ -465,9 +487,17 @@ export class ZoteroPicker extends LitElement {
               : this.items.length === 0
               ? html`
                   <div class="empty-state">
-                    <h3>${this.activeTab === 'recent' ? 'No papers in Zotero' : 'No results found'}</h3>
+                    <h3>
+                      ${this.mode === 'supplements'
+                        ? 'No Supplemental PDFs Found'
+                        : this.activeTab === 'recent'
+                        ? 'No papers in Zotero'
+                        : 'No results found'}
+                    </h3>
                     <p>
-                      ${this.activeTab === 'recent'
+                      ${this.mode === 'supplements'
+                        ? 'This paper has no additional PDF attachments in Zotero.'
+                        : this.activeTab === 'recent'
                         ? 'Add papers to your Zotero library to see them here.'
                         : 'Try a different search term.'}
                     </p>

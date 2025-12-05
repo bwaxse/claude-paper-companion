@@ -4,6 +4,7 @@ export interface Session {
   created_at: string;
   initial_analysis: string;
   page_count?: number;
+  zotero_key?: string;  // Zotero item key if session was loaded from Zotero
 }
 
 export interface ConversationMessage {

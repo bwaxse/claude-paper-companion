@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .routes import sessions, queries, zotero
@@ -184,7 +186,8 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include routers
+# Include routers BEFORE mounting static files
+# This ensures /api/*, /docs, /redoc, /openapi.json take priority
 app.include_router(sessions.router)
 app.include_router(queries.router)
 app.include_router(zotero.router)
@@ -214,3 +217,33 @@ else:
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Custom API docs endpoints (before static file mounting)
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui():
+    """Swagger UI documentation."""
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="Paper Companion API - Swagger UI"
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc():
+    """ReDoc documentation."""
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title="Paper Companion API - ReDoc"
+    )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def get_openapi_schema():
+    """OpenAPI schema endpoint."""
+    return get_openapi(
+        title="Paper Companion API",
+        version="0.1.0",
+        description="AI-powered academic paper analysis and conversation",
+        routes=app.routes
+    )

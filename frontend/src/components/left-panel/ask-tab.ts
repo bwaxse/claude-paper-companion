@@ -3,10 +3,12 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../../services/api';
 import type { ConversationMessage } from '../../types/session';
 import type { QueryRequest } from '../../types/query';
+import type { ZoteroItem } from '../../types/session';
 import '../shared/conversation-item';
 import '../shared/query-input';
 import '../shared/loading-spinner';
 import '../shared/error-message';
+import '../zotero-picker/zotero-picker';
 
 @customElement('ask-tab')
 export class AskTab extends LitElement {
@@ -15,9 +17,14 @@ export class AskTab extends LitElement {
   @property({ type: Array }) flags: number[] = [];
   @property({ type: String }) selectedText = '';
   @property({ type: Number }) selectedPage?: number;
+  @property({ type: String }) zoteroKey?: string;  // Zotero key if session was loaded from Zotero
 
   @state() private loading = false;
   @state() private error = '';
+  @state() private showSupplementPicker = false;
+  @state() private loadingSupplements = false;
+  @state() private supplementAttachments: ZoteroItem[] = [];
+  @state() private supplementCount: number | null = null; // null = not loaded yet, 0 = none available, >0 = count
 
   @query('.conversation-container') private conversationContainer!: HTMLElement;
 
@@ -157,6 +164,179 @@ export class AskTab extends LitElement {
       console.error('Query error:', err);
     } finally {
       this.loading = false;
+    }
+  }
+
+  updated(changedProperties: Map<string, unknown>) {
+    // Check for supplements when zoteroKey is set
+    if (changedProperties.has('zoteroKey') && this.zoteroKey) {
+      this.checkSupplementsAvailable();
+    }
+  }
+
+  private async checkSupplementsAvailable() {
+    if (!this.zoteroKey) {
+      this.supplementCount = null;
+      return;
+    }
+
+    try {
+      const attachments = await api.getPaperAttachments(this.zoteroKey);
+      this.supplementCount = attachments.length;
+      // Pre-cache the attachments so we don't need to fetch again when opening picker
+      if (attachments.length > 0) {
+        this.supplementAttachments = attachments;
+      }
+    } catch (err) {
+      // If we can't fetch, just don't show count
+      this.supplementCount = null;
+      console.error('Failed to check supplements:', err);
+    }
+  }
+
+  private async handleShowSupplementPicker() {
+    if (!this.zoteroKey) {
+      // If no Zotero key, we could implement file upload here
+      this.error = 'Upload supplement feature coming soon';
+      return;
+    }
+
+    // If we don't have attachments cached or count is 0, try to fetch
+    if (!this.supplementAttachments.length || this.supplementCount === 0) {
+      this.loadingSupplements = true;
+      try {
+        const attachments = await api.getPaperAttachments(this.zoteroKey);
+        if (attachments.length === 0) {
+          this.error = 'No supplemental files found for this paper';
+          this.loadingSupplements = false;
+          return;
+        }
+        this.supplementAttachments = attachments;
+        this.supplementCount = attachments.length;
+      } catch (err) {
+        if (err instanceof ApiError) {
+          this.error = `Failed to load supplements: ${err.message}`;
+        } else {
+          this.error = 'Failed to load supplements';
+        }
+        this.loadingSupplements = false;
+        return;
+      } finally {
+        this.loadingSupplements = false;
+      }
+    }
+
+    // Show picker with cached attachments
+    this.showSupplementPicker = true;
+  }
+
+  private handleCloseSupplementPicker() {
+    this.showSupplementPicker = false;
+  }
+
+  private async handleSupplementUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file || !this.sessionId || !this.zoteroKey) {
+      return;
+    }
+
+    this.loadingSupplements = true;
+    this.error = '';
+
+    try {
+      // Upload supplement to backend (which will add it to Zotero)
+      await api.uploadSupplement(this.sessionId, this.zoteroKey, file);
+
+      // Refresh the supplement count and list
+      await this.checkSupplementsAvailable();
+
+      // Show success message
+      const successMessage: ConversationMessage = {
+        id: this.conversation.length,
+        role: 'user',
+        content: `📎 **Supplement Uploaded**: "${file.name}" has been added to your Zotero library and is now available for reference.`,
+        timestamp: new Date().toISOString()
+      };
+
+      this.conversation = [...this.conversation, successMessage];
+
+      // Notify parent
+      this.dispatchEvent(
+        new CustomEvent('conversation-updated', {
+          detail: { conversation: this.conversation },
+          bubbles: true,
+          composed: true
+        })
+      );
+    } catch (err) {
+      if (err instanceof ApiError) {
+        this.error = `Failed to upload supplement: ${err.message}`;
+      } else {
+        this.error = 'Failed to upload supplement. Please try again.';
+      }
+      console.error('Upload error:', err);
+    } finally {
+      this.loadingSupplements = false;
+      // Clear the input so the same file can be uploaded again if needed
+      input.value = '';
+    }
+  }
+
+  private async handleSupplementSelected(e: CustomEvent<{ session: any; paper: ZoteroItem }>) {
+    if (!this.sessionId) return;
+
+    const { paper } = e.detail;
+    this.showSupplementPicker = false;
+    this.loadingSupplements = true;
+    this.error = '';
+
+    try {
+      // Load supplement text from backend
+      const supplement = await api.loadSupplement(this.sessionId, paper.key);
+
+      // Add system message about loaded supplement
+      const supplementMessage: ConversationMessage = {
+        id: this.conversation.length,
+        role: 'user',
+        content: `📎 **Supplement Loaded**: "${supplement.title}" (${supplement.authors || 'Unknown'}, ${supplement.year || 'N/A'})\n\nYou can now reference this supplement in your questions.`,
+        timestamp: new Date().toISOString()
+      };
+
+      this.conversation = [...this.conversation, supplementMessage];
+
+      // Add the supplement text as a system message that Claude can see
+      const supplementContextMessage: ConversationMessage = {
+        id: this.conversation.length + 1,
+        role: 'assistant',
+        content: `[Supplement loaded: "${supplement.title}"\n\n${supplement.supplement_text.substring(0, 3000)}${supplement.supplement_text.length > 3000 ? '...' : ''}]`,
+        timestamp: new Date().toISOString()
+      };
+
+      this.conversation = [...this.conversation, supplementContextMessage];
+
+      // Notify parent of conversation update
+      this.dispatchEvent(
+        new CustomEvent('conversation-updated', {
+          detail: { conversation: this.conversation },
+          bubbles: true,
+          composed: true
+        })
+      );
+
+      // Scroll to bottom after update
+      await this.updateComplete;
+      this.scrollToBottom();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        this.error = `Failed to load supplement: ${err.message}`;
+      } else {
+        this.error = 'Failed to load supplement. Please try again.';
+      }
+      console.error('Supplement loading error:', err);
+    } finally {
+      this.loadingSupplements = false;
     }
   }
 
@@ -339,10 +519,10 @@ export class AskTab extends LitElement {
     return html`
       <div class="conversation-container">
         ${this.renderInitialAnalysis()} ${this.renderConversation()}
-        ${this.loading
+        ${this.loading || this.loadingSupplements
           ? html`
               <div class="loading-overlay">
-                <loading-spinner message="Thinking..."></loading-spinner>
+                <loading-spinner message="${this.loadingSupplements ? 'Loading supplement...' : 'Thinking...'}"></loading-spinner>
               </div>
             `
           : ''}
@@ -359,6 +539,64 @@ export class AskTab extends LitElement {
           : ''}
       </div>
 
+      <div style="padding: 8px 16px; border-top: 1px solid #e0e0e0; background: white;">
+        ${this.zoteroKey && this.supplementCount === 0
+          ? html`
+              <div style="text-align: center; margin-bottom: 8px; font-size: 12px; color: #666;">
+                No Supplemental PDFs Available
+              </div>
+              <input
+                type="file"
+                accept="application/pdf"
+                style="display: none;"
+                id="supplement-upload"
+                @change=${this.handleSupplementUpload}
+              />
+              <button
+                style="
+                  width: 100%;
+                  padding: 10px;
+                  background: #4CAF50;
+                  border: 1px solid #45a049;
+                  border-radius: 6px;
+                  font-size: 13px;
+                  cursor: pointer;
+                  color: white;
+                  font-weight: 500;
+                "
+                @click=${() => {
+                  const input = this.shadowRoot?.getElementById('supplement-upload') as HTMLInputElement;
+                  input?.click();
+                }}
+                ?disabled=${!this.sessionId || this.loading || this.loadingSupplements}
+              >
+                📎 Upload Supplemental PDF
+              </button>
+            `
+          : html`
+              <button
+                style="
+                  width: 100%;
+                  padding: 10px;
+                  background: #f0f0f0;
+                  border: 1px solid #ddd;
+                  border-radius: 6px;
+                  font-size: 13px;
+                  cursor: pointer;
+                  color: #333;
+                "
+                @click=${this.handleShowSupplementPicker}
+                ?disabled=${!this.sessionId || this.loading || this.loadingSupplements}
+              >
+                ${this.zoteroKey
+                  ? this.supplementCount === null
+                    ? '📎 Checking supplements...'
+                    : `📎 Add Supplement (${this.supplementCount})`
+                  : '📎 Upload Supplement'}
+              </button>
+            `}
+      </div>
+
       <query-input
         .selectedText=${this.selectedText}
         .selectedPage=${this.selectedPage}
@@ -366,6 +604,14 @@ export class AskTab extends LitElement {
         @submit-query=${this.handleSubmitQuery}
         @clear-selection=${this.handleClearSelection}
       ></query-input>
+
+      <zotero-picker
+        .visible=${this.showSupplementPicker}
+        .preFilteredItems=${this.supplementAttachments}
+        .mode=${'supplements'}
+        @zotero-paper-selected=${this.handleSupplementSelected}
+        @close=${this.handleCloseSupplementPicker}
+      ></zotero-picker>
     `;
   }
 }

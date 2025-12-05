@@ -18,6 +18,7 @@ import type { ZoteroItem } from '../types/session';
 export class AppRoot extends LitElement {
   @state() private sessionId = '';
   @state() private filename = '';
+  @state() private zoteroKey?: string;  // Zotero key if session was loaded from Zotero
   @state() private pdfUrl = '';
   @state() private conversation: ConversationMessage[] = [];
   @state() private flags: number[] = [];
@@ -286,6 +287,7 @@ export class AppRoot extends LitElement {
 
       this.sessionId = session.session_id;
       this.filename = session.filename;
+      this.zoteroKey = undefined;  // File upload, no Zotero key
       this.pdfUrl = URL.createObjectURL(file);
 
       // Save to session storage for "pick up where left off"
@@ -359,6 +361,7 @@ export class AppRoot extends LitElement {
 
       this.sessionId = fullSession.session_id;
       this.filename = fullSession.filename;
+      this.zoteroKey = fullSession.zotero_key;  // Restore Zotero key if available
       this.flags = fullSession.flags || [];
 
       // Build conversation with initial analysis as first messages
@@ -427,7 +430,7 @@ export class AppRoot extends LitElement {
   }
 
   async handleZoteroPaperSelected(e: CustomEvent<{ session: Session; paper: ZoteroItem }>) {
-    const { session } = e.detail;
+    const { session, paper } = e.detail;
     this.showZoteroPicker = false;
     this.loading = true;
     this.error = '';
@@ -438,6 +441,7 @@ export class AppRoot extends LitElement {
 
       this.sessionId = fullSession.session_id;
       this.filename = fullSession.filename;
+      this.zoteroKey = paper.key;  // Set Zotero key from selected paper
       this.flags = fullSession.flags || [];
 
       // Build conversation with initial analysis as first messages
@@ -541,6 +545,7 @@ export class AppRoot extends LitElement {
         <left-panel
           .sessionId=${this.sessionId}
           .filename=${this.filename}
+          .zoteroKey=${this.zoteroKey}
           .conversation=${this.conversation}
           .flags=${this.flags}
           .selectedText=${this.selectedText}
