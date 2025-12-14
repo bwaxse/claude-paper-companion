@@ -2,7 +2,7 @@ export interface QueryRequest {
   query: string;
   highlighted_text?: string;
   page?: number;
-  use_sonnet?: boolean;
+  model?: 'sonnet' | 'haiku';
 }
 
 export interface QueryResponse {
@@ -13,4 +13,17 @@ export interface QueryResponse {
     input_tokens: number;
     output_tokens: number;
   };
+}
+
+export interface LinkedInPostEndings {
+  question: string;
+  declarative: string;
+  forward_looking: string;
+}
+
+export interface LinkedInPostResponse {
+  hook: string;
+  body: string;
+  endings: LinkedInPostEndings;
+  full_post_options: string[];
 }

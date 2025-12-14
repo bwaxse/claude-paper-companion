@@ -1,5 +1,5 @@
 """
-Configuration management for Paper Companion Web Backend.
+Configuration management for Scholia Web Backend.
 Loads settings from environment variables and .env file.
 """
 

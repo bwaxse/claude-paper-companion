@@ -1,4 +1,4 @@
-# Paper Companion Web Backend
+# Scholia Web Backend
 
 AI-powered academic paper analysis and conversation system built with FastAPI.
 
@@ -7,7 +7,12 @@ AI-powered academic paper analysis and conversation system built with FastAPI.
 - **PDF Upload & Analysis**: Upload papers, get instant AI-powered critical appraisal
 - **Conversational Q&A**: Ask questions about papers with full context retention
 - **Session Management**: Persistent sessions with conversation history
-- **Zotero Integration**: Search library, retrieve papers, save insights as notes
+- **Zotero Integration**:
+  - Search library, retrieve papers, save insights as notes
+  - Auto-redownload PDFs when missing or stale
+  - Upload supplemental PDFs to Zotero library
+  - Smart supplement detection (excludes main PDF)
+  - Manual refresh to get latest highlights
 - **Insight Extraction**: Automatic thematic organization of paper analysis
 - **REST API**: Complete OpenAPI-documented REST endpoints
 

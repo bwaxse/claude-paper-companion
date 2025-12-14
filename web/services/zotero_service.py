@@ -1,5 +1,5 @@
 """
-Zotero integration service for Paper Companion.
+Zotero integration service for Scholia.
 Handles all Zotero API operations for the web backend.
 """
 

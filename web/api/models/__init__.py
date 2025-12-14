@@ -10,6 +10,8 @@ from .session import (
     SessionDetail,
     ConversationMessage,
     SessionMetadata,
+    LinkedInPostEndings,
+    LinkedInPostResponse,
 )
 
 from .query import (
@@ -33,6 +35,16 @@ from .zotero import (
     ZoteroNoteResponse,
 )
 
+from .notion import (
+    NotionAuthResponse,
+    NotionProject,
+    NotionProjectList,
+    NotionProjectContext,
+    NotionRelevanceResponse,
+    NotionContentResponse,
+    NotionExportResponse,
+)
+
 __all__ = [
     # Session models
     "SessionCreate",
@@ -42,6 +54,8 @@ __all__ = [
     "SessionDetail",
     "ConversationMessage",
     "SessionMetadata",
+    "LinkedInPostEndings",
+    "LinkedInPostResponse",
     # Query models
     "QueryRequest",
     "QueryResponse",
@@ -59,4 +73,12 @@ __all__ = [
     "ZoteroSearchResponse",
     "ZoteroNoteRequest",
     "ZoteroNoteResponse",
+    # Notion models
+    "NotionAuthResponse",
+    "NotionProject",
+    "NotionProjectList",
+    "NotionProjectContext",
+    "NotionRelevanceResponse",
+    "NotionContentResponse",
+    "NotionExportResponse",
 ]

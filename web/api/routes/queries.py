@@ -47,7 +47,7 @@ async def query_paper(
     ```json
     {
       "query": "What is the main contribution of this paper?",
-      "use_sonnet": true
+      "model": "sonnet"
     }
     ```
     """

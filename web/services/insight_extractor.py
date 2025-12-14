@@ -1,5 +1,5 @@
 """
-Insight extraction service for Paper Companion web backend.
+Insight extraction service for Scholia web backend.
 Ports critical appraisal extraction from CLI to web service.
 """
 
@@ -146,7 +146,7 @@ class InsightExtractor:
 
         # Build extraction prompt - use initial analysis as paper context, not full PDF
         # This ensures insights reflect what was actually discussed, not a fresh analysis
-        extraction_prompt = f"""Based on our conversation about this paper, extract insights and organize them THEMATICALLY.
+        extraction_prompt = f"""You are synthesizing insights from a paper analysis session.
 
 INITIAL PAPER SUMMARY:
 {initial_analysis}
@@ -154,49 +154,48 @@ INITIAL PAPER SUMMARY:
 CONVERSATION ({len(exchanges_data) // 2} exchanges):
 {conv_summary[:10000]}
 
-FLAGGED EXCHANGES (these are especially important):
+STARRED EXCHANGES (reader marked these as important):
 {flagged_summary}
 
 HIGHLIGHTS FROM READING:
 {highlights_summary}
 
-Please provide a JSON object with:
+Return a JSON object with this LEAN structure:
 
-1. BIBLIOGRAPHIC METADATA:
-   - title: Paper title (if mentioned)
-   - authors: Author list (if mentioned)
-   - journal: Publication venue (if mentioned)
-   - year: Publication year (if mentioned)
-   - doi: DOI (if mentioned)
+{{
+  "summary": "2-3 sentence bottom line: what this paper contributes and its key limitations",
 
-2. THEMATICALLY ORGANIZED INSIGHTS:
-   - strengths: List of paper's genuine strengths we discussed
-   - weaknesses: Methodological or conceptual weaknesses identified
-   - methodological_notes: Specific technical/methods insights
-   - statistical_concerns: Any stats/analysis issues raised
-   - theoretical_contributions: Conceptual advances or frameworks
-   - empirical_findings: Key results and data points discussed
-   - questions_raised: Open questions and uncertainties we explored
-   - applications: Practical implications discussed
-   - connections: Links to other work/ideas mentioned
-   - critiques: Specific critical points made (beyond general weaknesses)
-   - surprising_elements: Unexpected findings or approaches noted
+  "learnings": [
+    "Most important insight from conversation (user engaged with this)",
+    "Another key takeaway discussed",
+    "Methodological lesson if relevant"
+  ],
 
-3. KEY_LESSONS: The 3-5 most important lessons or takeaways from our discussion (NOT verbatim quotes)
-   Each as: {{"lesson": "synthesized insight in 1-2 sentences", "theme": "category", "importance": "why this matters"}}
+  "assessment": {{
+    "strengths": ["genuine strength 1", "strength 2"],
+    "limitations": ["critical weakness 1", "weakness 2"]
+  }},
 
-4. CUSTOM_THEMES: Any recurring themes specific to our discussion that don't fit above
-   (e.g., if we spent a lot of time on "reproducibility" or "ethical implications")
-   Format as: {{"theme_name": ["insight 1", "insight 2"]}}
+  "open_questions": [
+    "Unresolved question to revisit",
+    "Claim to scrutinize (with page/figure reference if available)"
+  ],
 
-5. HIGHLIGHT_SUGGESTIONS: Specific passages to highlight, grouped by:
-   - critical_passages: Must-read sections
-   - questionable_claims: Passages needing scrutiny
-   - methodological_details: Technical sections of interest
-   - key_findings: Result sections to mark
+  "bibliographic": {{
+    "title": "paper title",
+    "authors": "author list if mentioned",
+    "year": "publication year if mentioned"
+  }}
+}}
 
-Focus especially on the FLAGGED exchanges as these were marked as important during reading.
-Provide ONLY the JSON object, no additional text.
+CRITICAL RULES:
+- "learnings" ONLY includes what actually came up in conversation (not generic paper analysis)
+- If conversation is minimal, learnings may be empty or very short
+- Include page/figure references in open_questions when available (e.g., "Fig 3 methodology unclear")
+- Keep each bullet concise (1-2 sentences max)
+- Prioritize what the reader actually engaged with over comprehensive coverage
+
+Return ONLY valid JSON.
 """
 
         # Call Claude to extract insights using structured extraction
@@ -218,7 +217,7 @@ Provide ONLY the JSON object, no additional text.
             "filename": dict(session_row)["filename"],
             "extracted_at": datetime.now().isoformat(),
             "total_exchanges": len(exchanges_data) // 2,
-            "flagged_count": len(flagged_data),
+            "flagged_count": len(flagged_data) // 2,  # Divide by 2 since each exchange has user + assistant messages
             "highlights_count": len(highlights_data),
             "model_used": self.model
         }
@@ -319,139 +318,74 @@ Provide ONLY the JSON object, no additional text.
 
             return insights
         except (json.JSONDecodeError, AttributeError):
-            # Fallback structure
+            # Fallback structure matching new lean format
             return {
                 "extraction_error": "Failed to parse structured insights",
                 "raw_response": response_text[:500],
-                "bibliographic": {},
-                "strengths": [],
-                "weaknesses": [],
-                "methodological_notes": [],
-                "key_quotes": []
+                "summary": "",
+                "learnings": [],
+                "assessment": {"strengths": [], "limitations": []},
+                "open_questions": [],
+                "bibliographic": {}
             }
 
     @staticmethod
     def format_insights_html(insights: Dict) -> str:
-        """
-        Format thematically organized insights as HTML for Zotero.
-
-        Args:
-            insights: Extracted insights dict from extract_insights()
-
-        Returns:
-            HTML formatted insights suitable for Zotero note
-        """
+        """Format session insights as HTML for both UI and Zotero."""
         metadata = insights.get("metadata", {})
+        bib = insights.get("bibliographic", {})
+        summary = insights.get("summary", "")
+        learnings = insights.get("learnings", [])
+        assessment = insights.get("assessment", {})
+        open_questions = insights.get("open_questions", [])
 
-        # Build HTML header
-        html = f"""<h2>📚 Paper Insights - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>"""
+        # Title line
+        title = bib.get("title", metadata.get("filename", "Unknown"))
+        html = f"<h2>Session Insights - {datetime.now().strftime('%Y-%m-%d')}</h2>\n"
+        html += f"<p><strong>{title}</strong></p>\n"
 
-        # Add bibliographic info if available
-        if insights.get("bibliographic"):
-            bib = insights["bibliographic"]
-            if any(bib.values()):
-                html += "\n<h3>📄 Paper Information</h3>\n<ul>\n"
-                if bib.get("title"):
-                    html += f'<li><strong>Title:</strong> {bib["title"]}</li>\n'
-                if bib.get("authors"):
-                    authors = bib["authors"] if isinstance(bib["authors"], str) else ", ".join(bib["authors"])
-                    html += f'<li><strong>Authors:</strong> {authors}</li>\n'
-                if bib.get("journal"):
-                    html += f'<li><strong>Publication:</strong> {bib["journal"]}</li>\n'
-                if bib.get("year"):
-                    html += f'<li><strong>Year:</strong> {bib["year"]}</li>\n'
-                if bib.get("doi"):
-                    html += f'<li><strong>DOI:</strong> {bib["doi"]}</li>\n'
+        # Summary
+        if summary:
+            html += f"<h3>Summary</h3>\n<p>{summary}</p>\n"
+
+        # What I Learned (only if there are learnings)
+        if learnings and len(learnings) > 0:
+            html += "<h3>What I Learned</h3>\n<ul>\n"
+            for item in learnings:
+                html += f"<li>{item}</li>\n"
+            html += "</ul>\n"
+
+        # Paper Assessment (strengths & limitations)
+        has_assessment = (assessment.get("strengths") or assessment.get("limitations"))
+        if has_assessment:
+            html += "<h3>Paper Assessment</h3>\n"
+
+            if assessment.get("strengths"):
+                html += "<p><strong>Strengths:</strong></p>\n<ul>\n"
+                for item in assessment["strengths"]:
+                    html += f"<li>{item}</li>\n"
                 html += "</ul>\n"
 
-        # Define theme display order and icons
-        theme_config = {
-            'strengths': ('💪', 'Strengths'),
-            'weaknesses': ('⚠️', 'Weaknesses & Limitations'),
-            'methodological_notes': ('🔬', 'Methodological Insights'),
-            'statistical_concerns': ('📊', 'Statistical Issues'),
-            'theoretical_contributions': ('💡', 'Theoretical Contributions'),
-            'empirical_findings': ('📈', 'Key Empirical Findings'),
-            'questions_raised': ('❓', 'Open Questions'),
-            'applications': ('🚀', 'Applications & Implications'),
-            'connections': ('🔗', 'Connections to Other Work'),
-            'critiques': ('🎯', 'Specific Critiques'),
-            'surprising_elements': ('😲', 'Surprising Elements'),
-        }
+            if assessment.get("limitations"):
+                html += "<p><strong>Limitations:</strong></p>\n<ul>\n"
+                for item in assessment["limitations"]:
+                    html += f"<li>{item}</li>\n"
+                html += "</ul>\n"
 
-        # Add themed sections (only if they have content)
-        for theme_key, (icon, title) in theme_config.items():
-            if theme_key in insights and insights[theme_key]:
-                items = insights[theme_key]
-                if items and len(items) > 0:
-                    html += f"\n<h3>{icon} {title}</h3>\n<ul>\n"
-                    for item in items:
-                        # Handle both string items and dict items
-                        if isinstance(item, dict):
-                            content = item.get("content", str(item))
-                            if item.get("flagged"):
-                                html += f'<li><strong>⭐ {content}</strong></li>\n'
-                            else:
-                                html += f'<li>{content}</li>\n'
-                        else:
-                            html += f'<li>{item}</li>\n'
-                    html += "</ul>\n"
+        # Open Questions
+        if open_questions and len(open_questions) > 0:
+            html += "<h3>Open Questions</h3>\n<ul>\n"
+            for item in open_questions:
+                html += f"<li>{item}</li>\n"
+            html += "</ul>\n"
 
-        # Add custom themes if any emerged
-        if insights.get('custom_themes'):
-            html += "\n<h3>🎨 Session-Specific Themes</h3>\n"
-            custom = insights['custom_themes']
-            if isinstance(custom, dict):
-                for theme, items in custom.items():
-                    if items:
-                        html += f"<h4>{theme.replace('_', ' ').title()}</h4>\n<ul>\n"
-                        for item in items:
-                            html += f'<li>{item}</li>\n'
-                        html += "</ul>\n"
-
-        # Add key quotes (if any)
-        if insights.get('key_quotes'):
-            html += "\n<h3>💬 Key Exchanges</h3>\n"
-            for quote in insights['key_quotes'][:5]:
-                if isinstance(quote, dict):
-                    user = quote.get('user', '')
-                    assistant = quote.get('assistant', '')
-                    theme = quote.get('theme', 'general')
-                    note = quote.get('note', '')
-
-                    note_html = f"<br><strong>⭐ Note:</strong> <em>{note}</em>" if note else ""
-                    html += f"""<blockquote style="border-left: 3px solid #ccc; padding-left: 10px; margin: 10px 0;">
-<strong>Q:</strong> {user}
-<br><strong>A:</strong> {assistant}{note_html}
-<br><small><em>{theme}</em></small>
-</blockquote>\n"""
-
-        # Add highlight suggestions
-        if insights.get('highlight_suggestions'):
-            html += "\n<h3>📝 Suggested Highlights</h3>\n"
-            suggestions = insights['highlight_suggestions']
-            if isinstance(suggestions, dict):
-                for category, items in suggestions.items():
-                    if items and len(items) > 0:
-                        html += f"<h4>{category.replace('_', ' ').title()}</h4>\n<ul>\n"
-                        for item in items[:3]:  # Limit to top 3 per category
-                            html += f'<li>{item}</li>\n'
-                        html += "</ul>\n"
-
-        # Add metadata footer
-        html += f"""
-<hr>
-<p><small>
-<em>Session: {metadata.get('filename', 'Unknown')}</em><br>
-<em>Total exchanges: {metadata.get('total_exchanges', 0)}</em><br>
-<em>Flagged insights: {metadata.get('flagged_count', 0)}</em><br>
-<em>Highlights: {metadata.get('highlights_count', 0)}</em><br>
-<em>Extracted: {metadata.get('extracted_at', 'Unknown')}</em>
-</small></p>
-"""
+        # Minimal footer
+        html += f"<hr>\n<p><small>{metadata.get('total_exchanges', 0)} exchanges"
+        if metadata.get('flagged_count', 0) > 0:
+            html += f" | {metadata['flagged_count']} flagged"
+        html += f" | {metadata.get('extracted_at', '')[:10]}</small></p>\n"
 
         return html
-
 
 # Singleton instance
 _insight_extractor: Optional[InsightExtractor] = None

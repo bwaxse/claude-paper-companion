@@ -1,5 +1,5 @@
 """
-Claude API integration for Paper Companion
+Claude API integration for Scholia
 """
 
 from typing import Dict, List, Optional

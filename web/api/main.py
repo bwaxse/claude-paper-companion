@@ -6,6 +6,10 @@ import logging
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +20,7 @@ from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .routes import sessions, queries, zotero
+from .routes import sessions, queries, zotero, notion
 from ..core.database import init_database
 
 
@@ -191,6 +195,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 app.include_router(sessions.router)
 app.include_router(queries.router)
 app.include_router(zotero.router)
+app.include_router(notion.router)
 
 
 # Serve static frontend files

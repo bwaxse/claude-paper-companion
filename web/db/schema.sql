@@ -1,4 +1,4 @@
--- Paper Companion Database Schema
+-- Scholia Database Schema
 -- SQLite database for storing sessions, conversations, and metadata
 
 -- Sessions table: stores paper information and extracted text
@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS insights (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- Notion project cache: cached project context for faster relevance generation
+CREATE TABLE IF NOT EXISTS notion_project_cache (
+    page_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    hypothesis TEXT,
+    themes TEXT,  -- JSON array of existing theme names
+    raw_content TEXT,
+    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for query performance
 CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_exchange ON conversations(session_id, exchange_id);
@@ -76,3 +86,4 @@ CREATE INDEX IF NOT EXISTS idx_flags_session ON flags(session_id);
 CREATE INDEX IF NOT EXISTS idx_highlights_session ON highlights(session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_zotero ON sessions(zotero_key);
 CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notion_cache_fetched ON notion_project_cache(fetched_at DESC);

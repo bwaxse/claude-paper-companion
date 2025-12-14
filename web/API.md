@@ -1,6 +1,6 @@
-# Paper Companion API Documentation
+# Scholia API Documentation
 
-Complete API reference for the Paper Companion web backend.
+Complete API reference for the Scholia web backend.
 
 **Base URL:** `http://localhost:8000`
 **API Version:** 0.1.0

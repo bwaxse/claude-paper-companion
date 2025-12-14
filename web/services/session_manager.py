@@ -355,6 +355,19 @@ class SessionManager:
             # Get page count from metadata or stored value
             page_count = None
 
+            # Get flags for this session
+            cursor = await db.execute(
+                """
+                SELECT DISTINCT exchange_id
+                FROM flags
+                WHERE session_id = ?
+                ORDER BY exchange_id
+                """,
+                (session_id,)
+            )
+            flag_rows = await cursor.fetchall()
+            flags = [row[0] for row in flag_rows]
+
             return SessionDetail(
                 session_id=session_row[0],
                 filename=display_name,  # Use title from metadata if available
@@ -363,7 +376,8 @@ class SessionManager:
                 updated_at=datetime.fromisoformat(session_row[5]) if session_row[5] else datetime.utcnow(),
                 zotero_key=session_row[2],
                 page_count=page_count,
-                conversation=conversation
+                conversation=conversation,
+                flags=flags
             )
 
     async def list_sessions(

@@ -1,1 +1,1 @@
-"""External integrations for Paper Companion"""
+"""External integrations for Scholia"""

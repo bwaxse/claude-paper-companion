@@ -1,5 +1,5 @@
 """
-Zotero integration for Paper Companion
+Zotero integration for Scholia
 """
 
 import json

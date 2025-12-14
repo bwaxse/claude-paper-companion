@@ -1,5 +1,5 @@
 """
-Business logic services for Paper Companion.
+Business logic services for Scholia.
 """
 
 from .session_manager import (
@@ -29,6 +29,21 @@ from .insight_extractor import (
     get_insight_extractor,
 )
 
+from .linkedin_generator import (
+    LinkedInGenerator,
+    get_linkedin_generator,
+)
+
+from .notion_client import (
+    NotionClient,
+    get_notion_client,
+)
+
+from .notion_exporter import (
+    NotionExporter,
+    get_notion_exporter,
+)
+
 __all__ = [
     # Session management
     "SessionManager",
@@ -49,4 +64,12 @@ __all__ = [
     # Insight extraction
     "InsightExtractor",
     "get_insight_extractor",
+    # LinkedIn post generation
+    "LinkedInGenerator",
+    "get_linkedin_generator",
+    # Notion integration
+    "NotionClient",
+    "get_notion_client",
+    "NotionExporter",
+    "get_notion_exporter",
 ]

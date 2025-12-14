@@ -191,8 +191,16 @@ export class AppRoot extends LitElement {
     }
 
     .empty-state h2 {
-      margin: 0 0 16px 0;
+      margin: 0 0 8px 0;
       font-size: 32px;
+    }
+
+    .empty-state .tagline {
+      margin: 0 0 24px 0;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      font-style: italic;
+      font-weight: 300;
     }
 
     .empty-state p {
@@ -266,6 +274,81 @@ export class AppRoot extends LitElement {
     .error-screen error-message {
       max-width: 500px;
       margin-bottom: 20px;
+    }
+
+    .recent-sessions {
+      width: 100%;
+      max-width: 500px;
+      margin: 0 0 32px 0;
+    }
+
+    .recent-sessions h3 {
+      font-size: 16px;
+      margin: 0 0 16px 0;
+      color: rgba(255, 255, 255, 0.9);
+      text-align: left;
+    }
+
+    .session-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+    }
+
+    .session-item:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .session-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .session-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .session-filename {
+      font-weight: 500;
+      font-size: 14px;
+      color: white;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-meta {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .see-all-link {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-block;
+      margin-top: 12px;
+    }
+
+    .see-all-link:hover {
+      color: white;
+      text-decoration: underline;
+    }
+
+    .no-sessions {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      margin-bottom: 24px;
     }
   `;
 
@@ -429,6 +512,19 @@ export class AppRoot extends LitElement {
     this.showZoteroPicker = false;
   }
 
+  handleHomeClick() {
+    // Clear current session and return to empty state
+    this.sessionId = '';
+    this.filename = '';
+    this.zoteroKey = undefined;
+    this.pdfUrl = '';
+    this.conversation = [];
+    this.flags = [];
+    this.selectedText = '';
+    this.selectedPage = undefined;
+    this.error = '';
+  }
+
   async handleZoteroPaperSelected(e: CustomEvent<{ session: Session; paper: ZoteroItem }>) {
     const { session, paper } = e.detail;
     this.showZoteroPicker = false;
@@ -495,10 +591,12 @@ export class AppRoot extends LitElement {
   private renderEmptyState() {
     return html`
       <div class="empty-state">
-        <h2>Paper Companion</h2>
+        <h2>Scholia</h2>
+        <p class="tagline">Critical reading, captured.</p>
         <p>
-          Upload a PDF to get started, load from Zotero, or continue a previous session.
+          Upload a PDF to get started or load from Zotero.
         </p>
+
         <div class="empty-state-actions">
           <label class="upload-btn">
             Upload PDF
@@ -506,9 +604,6 @@ export class AppRoot extends LitElement {
           </label>
           <button class="secondary-btn" @click=${this.handleShowZoteroPicker}>
             Load from Zotero
-          </button>
-          <button class="secondary-btn" @click=${this.handleShowSessionPicker}>
-            Previous Sessions
           </button>
         </div>
       </div>
@@ -555,6 +650,8 @@ export class AppRoot extends LitElement {
           @flags-updated=${(e: CustomEvent) => (this.flags = e.detail.flags)}
           @clear-selection=${this.handleClearSelection}
           @navigate-to-page=${this.handleNavigateToPage}
+          @home-click=${this.handleHomeClick}
+          @session-selected=${this.handleSessionSelected}
         ></left-panel>
       </div>
 

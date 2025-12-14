@@ -18,7 +18,7 @@
 ### Zotero API Key (Required)
 1. Go to https://www.zotero.org/settings/keys
 2. Click "Create new private key"
-3. Enter description: "Paper Companion"
+3. Enter description: "Scholia"
 4. Check permissions:
    - [x] Allow library access
    - [x] Allow notes access  
@@ -26,7 +26,7 @@
 5. Save and copy the key
 6. Note your User ID (shown on same page)
 
-## Step 2: Install Paper Companion
+## Step 2: Install Scholia
 
 ```bash
 # 1. Clone repository
@@ -82,12 +82,12 @@ source ~/.zshrc
 # Add to ~/.zshrc for quick access
 cat >> ~/.zshrc << 'EOF'
 
-# Paper Companion shortcuts
+# Scholia shortcuts
 pc() {
-    cd ~/Documents/paper_companion  # Update path
+    cd ~/Documents/scholia  # Update path
     source venv/bin/activate
     if [ $# -eq 0 ]; then
-        echo "📚 Paper Companion ready!"
+        echo "📚 Scholia ready!"
     else
         python chat.py "$@"
     fi

@@ -1,4 +1,4 @@
-# Paper Companion - Master TODO List
+# Scholia - Master TODO List
 
 **Status as of Nov 28, 2025:**
 - **Phase A (Backend)**: ✅ COMPLETE - FastAPI backend with all services implemented
@@ -9,20 +9,47 @@
 
 ## 🎯 Current Status
 
-### Recently Added (Nov 28, 2025)
+### Recently Added (Dec 9, 2025)
+- ✅ **Notion Integration**: Export insights to Notion Literature Reviews
+  - Multi-step modal workflow for project selection and customization
+  - Auto-generates relevance statements framed for specific projects
+  - Theme management (existing themes + create new)
+  - Project context caching with refresh option
+  - Search bar to filter Notion pages
+  - Exports as toggle blocks with key insights, questions, and session notes
+- ✅ **LinkedIn Post Generator**: "What I'm Reading" post generation
+  - Voice-calibrated to match authentic writing style
+  - Multiple ending options (question/declarative/forward-looking)
+  - Anti-LLM pattern constraints for natural feel
+  - One-click copy to clipboard
+- ✅ **UI Improvements**:
+  - Sticky action buttons in insights panel (always visible)
+  - Sessions list moved to left panel for better accessibility
+  - Improved loading states (buttons don't flicker during searches)
+
+### Previously Added (Dec 5, 2025)
+- ✅ **Zotero Supplement Management**: Complete supplement workflow
+  - Auto-check supplements on session load with count display
+  - Smart button: "Add Supplement (2)" or "No Supplemental PDFs Available"
+  - Upload supplemental PDFs directly to Zotero library
+  - Filter main PDF from supplements list (only show supplemental PDFs)
+  - Auto-redownload PDFs from Zotero when missing
+  - Manual refresh endpoint to get latest PDF with highlights
+- ✅ **Improved Claude Prompting** (`web/core/claude.py`):
+  - Changed conversation style from directive/grading to collaborative mentor
+  - Expanded scope: paper analysis + broader literature + methodology
+  - Removed "Wrong/Right/Partially correct" grading language
+  - New persona: "senior researcher and expert mentor"
+  - Maintains brevity (1-2 paragraphs) but with gentler tone
+  - Encourages drawing on broader expertise, not just paper content
+
+### Previously Added (Nov 28, 2025)
 - ✅ **Zotero Picker UI**: Fixed to filter out attachment PDFs, show only actual papers
-- ✅ **Supplement Loading**: Users can now load supplemental papers from Zotero into conversation
-  - Zotero sessions: "Add Supplement (Zotero)" shows attachments linked to current paper
-  - File upload sessions: "Upload Supplement" placeholder for future file upload feature
-  - Supplement text added to conversation history so Claude can reference it
-- ✅ **Zotero Key Tracking**: Backend and frontend now preserve Zotero key for sessions
-  - Available in prior sessions (restore from "Previous Sessions")
-  - Allows supplement loading even after session restore
+- ✅ **Supplement Loading**: Users can load supplemental papers from Zotero into conversation
+- ✅ **Zotero Key Tracking**: Backend and frontend preserve Zotero key for sessions
 
 ### Known Issues to Address
-- **Claude Response Format**: Initial analyses and insight extraction prompts need adjustment. Current responses aren't in the intended format. Consider revising prompts in `web/services/insight_extractor.py` and `web/core/claude.py` to match expected output structure.
-- **File Upload Supplements**: "Upload Supplement" button exists but file upload for supplements not yet implemented
-- **Zotero Attachments**: Backend endpoint `/zotero/attachments/{key}` assumes direct Zotero client access - may need error handling if attachments structure varies
+- **Initial Analysis Prompts**: Initial analyses and insight extraction prompts may need further adjustment. Consider revising prompts in `web/services/insight_extractor.py` to match expected output structure.
 
 ### Phase A: Backend Foundation
 **Status: ✅ COMPLETE** (12 of 15 base tasks + Phase B integration)

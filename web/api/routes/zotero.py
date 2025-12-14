@@ -3,6 +3,7 @@ FastAPI routes for Zotero integration.
 """
 
 import asyncio
+import json
 from typing import List, Optional
 from pathlib import Path
 import tempfile
@@ -16,6 +17,7 @@ from ..models.zotero import (
     ZoteroNoteResponse,
 )
 from ...services import get_zotero_service, get_session_manager, get_insight_extractor
+from ...core.database import get_db_manager
 
 
 router = APIRouter(prefix="/zotero", tags=["zotero"])
@@ -225,6 +227,7 @@ async def save_insights_to_zotero(request: ZoteroNoteRequest):
         # Get services
         zotero_service = get_zotero_service()
         session_manager = get_session_manager()
+        db = get_db_manager()
 
         if not zotero_service.is_configured():
             raise HTTPException(
@@ -240,12 +243,25 @@ async def save_insights_to_zotero(request: ZoteroNoteRequest):
                 detail=f"Session '{request.session_id}' not found"
             )
 
-        # Extract insights from session using InsightExtractor
-        insight_service = get_insight_extractor()
-        insights = await insight_service.extract_insights(request.session_id)
+        # Get cached insights from database (no re-extraction)
+        async with db.get_connection() as conn:
+            cached = await conn.execute(
+                "SELECT insights_json FROM insights WHERE session_id = ?",
+                (request.session_id,)
+            )
+            cached_row = await cached.fetchone()
 
-        # Format insights as HTML for Zotero
-        note_html = insight_service.format_insights_html(insights)
+        if not cached_row:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No insights found for this session. Please extract insights first in the Insights tab."
+            )
+
+        insights = json.loads(cached_row[0])
+
+        # Format cached insights as HTML for Zotero (no inference needed)
+        from ...services.insight_extractor import InsightExtractor
+        note_html = InsightExtractor.format_insights_html(insights)
 
         # Save note to Zotero
         success = await zotero_service.save_insights_to_note(

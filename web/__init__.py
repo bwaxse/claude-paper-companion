@@ -1,7 +1,7 @@
 """
-Paper Companion Web Backend
+Scholia Web Backend
 
-FastAPI-based web backend for the Paper Companion application.
+FastAPI-based web backend for the Scholia application.
 Provides REST API for paper analysis, session management, and Zotero integration.
 """
 

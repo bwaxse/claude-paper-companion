@@ -98,11 +98,13 @@ class QueryService:
             query_content += f"\n(Page {request.page_number})"
 
         # Get response from Claude
+        # Convert model string to use_sonnet boolean for backward compatibility with Claude client
+        use_sonnet = (request.model == 'sonnet' if request.model else True)
         response_text, usage_stats = await self.claude.query(
             user_query=query_content,
             pdf_text=full_text,
             conversation_history=conversation_history,
-            use_sonnet=request.use_sonnet
+            use_sonnet=use_sonnet
         )
 
         # Get next exchange ID

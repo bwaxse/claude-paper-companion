@@ -4,17 +4,28 @@ Modern web frontend for Paper Companion built with Lit + TypeScript + PDF.js.
 
 ## Features
 
-**✅ MVP Complete - End-to-End Flow Working!**
+**✅ Full-Featured Paper Analysis App!**
 
+### Core Features
 - **Multi-page PDF Viewer** - Render PDFs with virtualized scrolling for performance
 - **Text Selection** - Select and highlight text from PDF pages
-- **AI-Powered Q&A** - Ask questions about papers with full context
+- **AI-Powered Q&A** - Ask questions about papers with Claude as a senior researcher mentor
 - **Conversation UI** - Clean chat interface with history
-- **Backend Integration** - Full API integration with FastAPI backend
 - **Flag Important Exchanges** - Mark key insights
-- **Loading & Error States** - Polished UX
 - **Zoom Controls** - Zoom in/out and reset view
 - **Page Navigation** - Navigate between pages with prev/next buttons
+
+### Zotero Integration
+- **Load from Zotero** - Browse and load papers from your library
+- **Smart Supplement Detection** - Auto-check for supplemental PDFs
+- **Supplement Count Display** - Shows "Add Supplement (2)" or "No Supplemental PDFs Available"
+- **Upload to Zotero** - Add supplemental PDFs directly to your library
+- **Auto-refresh** - Get latest version with your highlights from Zotero
+
+### Session Management
+- **Persistent Sessions** - Resume conversations from previous sessions
+- **Session List** - Browse and restore past paper analyses
+- **Loading & Error States** - Polished UX throughout
 
 ## Quick Start
 

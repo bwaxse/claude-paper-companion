@@ -1,6 +1,13 @@
 import type { Session, SessionFull, ZoteroItem } from '../types/session';
-import type { QueryRequest, QueryResponse } from '../types/query';
+import type { QueryRequest, QueryResponse, LinkedInPostResponse } from '../types/query';
 import type { OutlineItem } from '../types/pdf';
+import type {
+  NotionProjectList,
+  NotionProjectContext,
+  NotionRelevanceResponse,
+  NotionContentResponse,
+  NotionExportResponse
+} from '../types/notion';
 
 export class ApiError extends Error {
   constructor(
@@ -329,6 +336,205 @@ class ApiClient {
       throw new ApiError(
         `Failed to upload supplement: ${response.statusText}`,
         response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Save insights to Zotero as a note
+   */
+  async saveInsightsToZotero(sessionId: string, zoteroKey: string, tags?: string[]): Promise<any> {
+    const response = await fetch(
+      `${this.baseUrl}/zotero/save-insights`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          parent_item_key: zoteroKey,
+          tags: tags || ['claude-analyzed']
+        })
+      }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        `Failed to save insights to Zotero: ${response.statusText}`,
+        response.status
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Generate LinkedIn post from session insights
+   */
+  async generateLinkedInPost(sessionId: string): Promise<LinkedInPostResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/sessions/${sessionId}/linkedin-post`,
+      {
+        method: 'POST'
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to generate LinkedIn post: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * List Notion projects (pages)
+   */
+  async listNotionProjects(query?: string): Promise<NotionProjectList> {
+    let url = `${this.baseUrl}/notion/projects`;
+    if (query) {
+      url += `?query=${encodeURIComponent(query)}`;
+    }
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to list Notion projects: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get Notion project context
+   */
+  async getNotionProjectContext(
+    pageId: string,
+    forceRefresh: boolean = false
+  ): Promise<NotionProjectContext> {
+    let url = `${this.baseUrl}/notion/project/${pageId}/context`;
+    if (forceRefresh) {
+      url += '?force_refresh=true';
+    }
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to get project context: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Generate relevance statement and theme suggestion
+   */
+  async generateNotionRelevance(
+    sessionId: string,
+    pageId: string
+  ): Promise<NotionRelevanceResponse> {
+    const url = `${this.baseUrl}/notion/generate-relevance?session_id=${encodeURIComponent(sessionId)}&page_id=${encodeURIComponent(pageId)}`;
+
+    const response = await fetch(url, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to generate relevance: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Generate full export content for Notion
+   */
+  async generateNotionContent(
+    sessionId: string,
+    pageId: string,
+    theme: string,
+    relevance: string,
+    includeSessionNotes: boolean = true
+  ): Promise<NotionContentResponse> {
+    const params = new URLSearchParams({
+      session_id: sessionId,
+      page_id: pageId,
+      theme: theme,
+      relevance: relevance,
+      include_session_notes: includeSessionNotes.toString()
+    });
+    const url = `${this.baseUrl}/notion/generate-content?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to generate content: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Export to Notion
+   */
+  async exportToNotion(
+    sessionId: string,
+    pageId: string,
+    theme: string,
+    content: string,
+    literatureReviewHeading: string = 'Literature Review'
+  ): Promise<NotionExportResponse> {
+    const url = `${this.baseUrl}/notion/export`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        page_id: pageId,
+        theme: theme,
+        content: content,
+        literature_review_heading: literatureReviewHeading
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errorData.detail || `Failed to export to Notion: ${response.statusText}`,
+        response.status,
+        errorData
       );
     }
 

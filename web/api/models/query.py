@@ -2,7 +2,7 @@
 Pydantic models for query/conversation handling.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -27,9 +27,9 @@ class QueryRequest(BaseModel):
         ge=1,
         description="Optional page number reference"
     )
-    use_sonnet: bool = Field(
-        default=True,
-        description="Use Sonnet (True) or Haiku (False) for response"
+    model: Optional[Literal['sonnet', 'haiku']] = Field(
+        default='sonnet',
+        description="Claude model to use: 'sonnet' for deep analysis, 'haiku' for fast responses"
     )
 
     @field_validator("query")
@@ -47,7 +47,7 @@ class QueryRequest(BaseModel):
                 "query": "What is the time complexity of multi-head attention?",
                 "highlighted_text": "Multi-head attention allows the model to jointly attend...",
                 "page_number": 5,
-                "use_sonnet": True
+                "model": "sonnet"
             }
         }
     )

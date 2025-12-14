@@ -6,16 +6,16 @@ Add these functions to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 # ============================================
-# Paper Companion Shortcuts
+# Scholia Shortcuts
 # ============================================
 
-# Main Paper Companion function
+# Main Scholia function
 pc() {
-    cd ~/Documents/paper_companion
+    cd ~/Documents/scholia
     source venv/bin/activate
-    
+
     if [ $# -eq 0 ]; then
-        echo "📚 Paper Companion ready! Usage:"
+        echo "📚 Scholia ready! Usage:"
         echo "  pc paper.pdf             # Load local PDF"
         echo "  pc zotero:KEY            # Load from Zotero"
         echo "  pc 'zotero:search:query' # Search Zotero"
@@ -178,7 +178,7 @@ You: /exit
 ## Advanced Zotero Integration
 
 ### Finding Papers by Tags
-After using Paper Companion, your Zotero library has rich tags:
+After using Scholia, your Zotero library has rich tags:
 - `claude-analyzed` - All processed papers
 - `session-20240115` - When you discussed it
 - `method:transformer` - Technical approaches
@@ -253,7 +253,7 @@ pc zotero:KEY < standard_questions.txt
 
 ## Example Session Output
 
-After a week of using Paper Companion:
+After a week of using Scholia:
 - 15 papers discussed
 - 47 flagged insights
 - 120+ tagged concepts

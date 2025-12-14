@@ -31,12 +31,53 @@ export class LeftPanel extends LitElement {
       background: white;
       border-bottom: 1px solid #e0e0e0;
       flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .header-content {
+      flex: 1;
+      min-width: 0; /* Allow shrinking */
+      overflow: hidden; /* Prevent overflow */
+    }
+
+    .header-title {
+      margin-bottom: 8px;
+    }
+
+    .home-button {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+      transition: all 0.2s;
+      flex-shrink: 0; /* Prevent button from shrinking */
+      margin-left: 12px;
+      align-self: flex-start; /* Align to top */
+    }
+
+    .home-button:hover {
+      background: #f5f5f5;
+      border-color: #ccc;
+      color: #333;
     }
 
     .panel-header h1 {
-      margin: 0 0 4px 0;
+      margin: 0 0 2px 0;
       font-size: 18px;
       color: #333;
+    }
+
+    .panel-header .tagline {
+      margin: 0;
+      font-size: 11px;
+      color: #999;
+      font-style: italic;
+      font-weight: 300;
     }
 
     .panel-header .filename {
@@ -114,12 +155,29 @@ export class LeftPanel extends LitElement {
     );
   }
 
+  private handleHomeClick() {
+    this.dispatchEvent(
+      new CustomEvent('home-click', {
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
   render() {
     return html`
       <div class="panel-header">
-        <h1>Paper Companion</h1>
-        ${this.filename
-          ? html`<p class="filename" title="${this.filename}">${this.filename}</p>`
+        <div class="header-content">
+          <div class="header-title">
+            <h1>Scholia</h1>
+            <p class="tagline">Critical reading, captured.</p>
+          </div>
+          ${this.filename
+            ? html`<p class="filename" title="${this.filename}">${this.filename}</p>`
+            : ''}
+        </div>
+        ${this.sessionId
+          ? html`<button class="home-button" @click=${this.handleHomeClick}>Home</button>`
           : ''}
       </div>
 
@@ -136,7 +194,7 @@ export class LeftPanel extends LitElement {
                 class="tab-button ${this.activeTab === 'ask' ? 'active' : ''}"
                 @click=${() => this.handleTabClick('ask')}
               >
-                Ask
+                Discuss
               </button>
             </div>
           `
@@ -146,6 +204,7 @@ export class LeftPanel extends LitElement {
         <concepts-tab
           class="${this.activeTab === 'concepts' ? 'active' : ''}"
           .sessionId=${this.sessionId}
+          .zoteroKey=${this.zoteroKey}
         ></concepts-tab>
 
         <ask-tab

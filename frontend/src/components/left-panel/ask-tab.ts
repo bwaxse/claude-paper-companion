@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import { api, ApiError } from '../../services/api';
-import type { ConversationMessage } from '../../types/session';
+import type { ConversationMessage, Session } from '../../types/session';
 import type { QueryRequest } from '../../types/query';
 import type { ZoteroItem } from '../../types/session';
 import '../shared/conversation-item';
@@ -25,6 +25,9 @@ export class AskTab extends LitElement {
   @state() private loadingSupplements = false;
   @state() private supplementAttachments: ZoteroItem[] = [];
   @state() private supplementCount: number | null = null; // null = not loaded yet, 0 = none available, >0 = count
+  @state() private selectedModel: 'sonnet' | 'haiku' = 'sonnet'; // Default to Sonnet
+  @state() private allSessions: Session[] = [];
+  @state() private loadingSessions = false;
 
   @query('.conversation-container') private conversationContainer!: HTMLElement;
 
@@ -62,6 +65,78 @@ export class AskTab extends LitElement {
       margin: 0;
       font-size: 14px;
       line-height: 1.5;
+    }
+
+    .sessions-list-container {
+      padding: 16px;
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .sessions-header {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .sessions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .session-item {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .session-item:hover {
+      border-color: #1a73e8;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .session-filename {
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-date {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .no-sessions {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+
+    .no-sessions p {
+      margin: 4px 0;
+    }
+
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .loading-container p {
+      margin-top: 12px;
+      color: #666;
+      font-size: 13px;
     }
 
     .initial-analysis {
@@ -111,7 +186,63 @@ export class AskTab extends LitElement {
     query-input {
       flex-shrink: 0;
     }
+
+    .model-selector {
+      padding: 12px 16px;
+      background: white;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .model-label {
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    .model-toggle {
+      display: flex;
+      background: #f0f0f0;
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .model-option {
+      padding: 6px 12px;
+      font-size: 12px;
+      border: none;
+      background: transparent;
+      color: #666;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .model-option:hover {
+      background: #e0e0e0;
+    }
+
+    .model-option.active {
+      background: white;
+      color: #1a73e8;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .model-info {
+      font-size: 11px;
+      color: #999;
+      margin-left: auto;
+    }
   `;
+
+  private handleModelChange(model: 'sonnet' | 'haiku') {
+    this.selectedModel = model;
+  }
 
   async handleSubmitQuery(e: CustomEvent<QueryRequest>) {
     if (!this.sessionId) return;
@@ -120,7 +251,12 @@ export class AskTab extends LitElement {
     this.error = '';
 
     try {
-      const response = await api.query(this.sessionId, e.detail);
+      // Add model parameter to the query request
+      const queryWithModel = {
+        ...e.detail,
+        model: this.selectedModel
+      };
+      const response = await api.query(this.sessionId, queryWithModel);
 
       // Add user message to conversation
       const userMessage: ConversationMessage = {
@@ -133,8 +269,9 @@ export class AskTab extends LitElement {
       };
 
       // Add assistant response to conversation
+      // Note: Both user and assistant share the same exchange_id
       const assistantMessage: ConversationMessage = {
-        id: response.exchange_id + 1,
+        id: response.exchange_id,
         role: 'assistant',
         content: response.response,
         model: response.model_used,
@@ -171,6 +308,50 @@ export class AskTab extends LitElement {
     // Check for supplements when zoteroKey is set
     if (changedProperties.has('zoteroKey') && this.zoteroKey) {
       this.checkSupplementsAvailable();
+    }
+
+    // Load sessions when no session is active
+    if (changedProperties.has('sessionId') && !this.sessionId && this.allSessions.length === 0) {
+      this.loadAllSessions();
+    }
+  }
+
+  private async loadAllSessions() {
+    this.loadingSessions = true;
+    try {
+      // Load all sessions (limit 100 for now)
+      this.allSessions = await api.listSessions(100, 0);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    } finally {
+      this.loadingSessions = false;
+    }
+  }
+
+  private handleSessionClick(session: Session) {
+    this.dispatchEvent(
+      new CustomEvent('session-selected', {
+        detail: { session },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private formatDate(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
   }
 
@@ -509,9 +690,30 @@ export class AskTab extends LitElement {
   render() {
     if (!this.sessionId) {
       return html`
-        <div class="empty-state">
-          <h3>No paper loaded</h3>
-          <p>Upload a PDF to start asking questions.</p>
+        <div class="sessions-list-container">
+          <h3 class="sessions-header">Recent Papers</h3>
+          ${this.loadingSessions ? html`
+            <div class="loading-container">
+              <loading-spinner></loading-spinner>
+              <p>Loading sessions...</p>
+            </div>
+          ` : this.allSessions.length > 0 ? html`
+            <div class="sessions-list">
+              ${this.allSessions.map(session => html`
+                <div class="session-item" @click=${() => this.handleSessionClick(session)}>
+                  <div class="session-filename" title="${session.filename}">
+                    ${session.filename}
+                  </div>
+                  <div class="session-date">${this.formatDate(session.created_at)}</div>
+                </div>
+              `)}
+            </div>
+          ` : html`
+            <div class="no-sessions">
+              <p>No previous sessions yet</p>
+              <p style="font-size: 13px; color: #999;">Upload a PDF to get started</p>
+            </div>
+          `}
         </div>
       `;
     }
@@ -595,6 +797,27 @@ export class AskTab extends LitElement {
                   : '📎 Upload Supplement'}
               </button>
             `}
+      </div>
+
+      <div class="model-selector">
+        <span class="model-label">Model:</span>
+        <div class="model-toggle">
+          <button
+            class="model-option ${this.selectedModel === 'sonnet' ? 'active' : ''}"
+            @click=${() => this.handleModelChange('sonnet')}
+          >
+            Sonnet
+          </button>
+          <button
+            class="model-option ${this.selectedModel === 'haiku' ? 'active' : ''}"
+            @click=${() => this.handleModelChange('haiku')}
+          >
+            Haiku
+          </button>
+        </div>
+        <span class="model-info">
+          ${this.selectedModel === 'sonnet' ? 'Deep analysis • $3/MTok' : 'Fast & cheap • $0.25/MTok'}
+        </span>
       </div>
 
       <query-input

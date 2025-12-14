@@ -1,4 +1,4 @@
-# Web Backend Dependencies for Paper Companion
+# Web Backend Dependencies for Scholia
 # Phase A: FastAPI Backend
 
 # Web Framework
@@ -23,3 +23,7 @@ aiosqlite
 
 # Zotero Integration
 pyzotero
+
+# Notion Integration
+notion-client
+aiohttp

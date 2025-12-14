@@ -13,6 +13,7 @@ from ..models import (
     SessionResponse,
     SessionList,
     SessionDetail,
+    LinkedInPostResponse,
 )
 from ...services import (
     get_session_manager,
@@ -21,6 +22,7 @@ from ...services import (
     list_sessions as service_list_sessions,
     delete_session as service_delete_session,
     get_zotero_service,
+    get_linkedin_generator,
 )
 from ...core.pdf_processor import PDFProcessor
 from ...services.insight_extractor import get_insight_extractor
@@ -621,4 +623,75 @@ async def get_session_concepts(session_id: str, force: bool = False, cache_only:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract concepts: {str(e)}"
+        )
+
+
+@router.post("/{session_id}/linkedin-post", response_model=LinkedInPostResponse)
+async def generate_linkedin_post(session_id: str):
+    """
+    Generate a LinkedIn post from session insights.
+
+    **Args:**
+    - session_id: Session identifier
+
+    **Returns:**
+    - LinkedInPostResponse with hook, body, endings, and full_post_options
+
+    **Raises:**
+    - 404: If session not found or insights not extracted
+    - 500: If generation fails
+
+    **Requirements:**
+    - Session must exist
+    - Insights must be extracted first (via /sessions/{session_id}/concepts)
+
+    **Use case:**
+    - Generate LinkedIn "What I'm Reading" post from insights
+    - Get post with multiple ending options
+    - Copy to clipboard for manual LinkedIn posting
+    """
+    try:
+        # Check if session exists
+        session = await service_get_session(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session not found: {session_id}"
+            )
+
+        # Get insights for this session (from cache)
+        db = get_db_manager()
+        async with db.get_connection() as conn:
+            cached = await conn.execute(
+                "SELECT insights_json FROM insights WHERE session_id = ?",
+                (session_id,)
+            )
+            cached_row = await cached.fetchone()
+
+            if not cached_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No insights found. Please extract insights first via /sessions/{session_id}/concepts"
+                )
+
+            insights = json.loads(cached_row[0])
+
+        # Generate LinkedIn post
+        generator = get_linkedin_generator()
+        post_data = await generator.generate_linkedin_post(insights)
+
+        # Convert to response model
+        return LinkedInPostResponse(**post_data)
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate LinkedIn post: {str(e)}"
         )
